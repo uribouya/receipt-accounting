@@ -818,56 +818,45 @@ async function processFiles(files) {
     log.prepend(el);
   }
 
-  for (const file of files) {
-    const label = file.name.length > 20 ? file.name.slice(0,18)+'…' : file.name;
-    addLog(label, 'ing', 'AI解析中…');
-    try {
-      const { b64, mime } = await normalizeImage(file);
-      const data = await analyzeAI(b64, mime);
-      const rec = { id:genId(), img:b64, imgType:mime, createdAt:new Date().toISOString(), ...data };
-      receipts.unshift(rec);
-      added++;
-      // 最初のログ（ing）を ok に置き換え
-      log.firstChild.className = 'blog-item ok';
-      log.firstChild.textContent = `✅ ${label} — ${rec.store||'不明'} ${fmt(rec.total)}`;
-    } catch(e) {
-      // ClaudeアプリのArtifact環境では画像AI解析不可 → 手動入力モーダルへ
-      if (e.message === '__SAVE_TO_IPHONE__' || e.message === '__MANUAL_INPUT__') {
-        log.firstChild.className = 'blog-item err';
-        log.firstChild.textContent = `⚠️ ${label} — iPhoneに保存してSafariで開いてください`;
+  try {
+    for (const file of files) {
+      const label = file.name.length > 20 ? file.name.slice(0,18)+'…' : file.name;
+      addLog(label, 'ing', 'AI解析中…');
+      try {
+        const { b64, mime } = await normalizeImage(file);
+        const data = await analyzeAI(b64, mime);
+        const rec = { id:genId(), img:b64, imgType:mime, createdAt:new Date().toISOString(), ...data };
+        receipts.unshift(rec);
+        added++;
+        log.firstChild.className = 'blog-item ok';
+        log.firstChild.textContent = `✅ ${label} — ${rec.store||'不明'} ${fmt(rec.total)}`;
+      } catch(e) {
+        const errMsg = e.message || '不明なエラー';
+        if (log.firstChild) {
+          log.firstChild.className = 'blog-item err';
+          log.firstChild.textContent = `❌ ${label} — ${errMsg}`;
+        }
         failed++;
-        done++;
-        bar.style.width = (done/total*100)+'%';
-        cnt.textContent = `${done} / ${total}`;
-        batchRunning = false;
-        showSaveGuideModal();
-        return;
       }
-      const errMsg = e.message || '不明なエラー';
-      log.firstChild.className = 'blog-item err';
-      log.firstChild.textContent = `❌ ${label} — ${errMsg}`;
-      failed++;
+      done++;
+      bar.style.width = `${Math.round(done/total*100)}%`;
+      cnt.textContent = `${done} / ${total}`;
+      save(); renderList(); updateHeader();
     }
-    done++;
-    bar.style.width = `${Math.round(done/total*100)}%`;
-    cnt.textContent = `${done} / ${total}`;
-    save(); renderList(); updateHeader();
-  }
 
-  batchRunning = false;
-  bar.style.width = '100%';
-  cnt.textContent = `${done} / ${total}`;
-  if (added > 0) {
-    selectRec(receipts[0].id); setTab('dt');
-    if (isMobile()) setBnavActive('dt');
+    if (added > 0) {
+      selectRec(receipts[0].id); setTab('dt');
+      if (isMobile()) setBnavActive('dt');
+    }
+    const msg = failed > 0
+      ? `${added}枚登録・${failed}枚失敗`
+      : `✓ ${added}枚すべて登録しました`;
+    toast(msg, failed > 0);
+  } finally {
+    batchRunning = false;
+    bar.style.width = '100%';
+    setTimeout(() => { wrap.classList.remove('show'); }, 3000);
   }
-  const msg = failed > 0
-    ? `${added}枚登録・${failed}枚失敗`
-    : `✓ ${added}枚すべて登録しました`;
-  toast(msg, failed > 0);
-
-  // 常に3秒後に進捗を畳む
-  setTimeout(() => { wrap.classList.remove('show'); batchRunning = false; }, 3000);
 } // end processFiles
 
 const toB64 = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(f); });
