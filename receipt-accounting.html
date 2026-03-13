@@ -855,8 +855,9 @@ async function processFiles(files) {
   }
 
   batchRunning = false;
+  bar.style.width = '100%';
+  cnt.textContent = `${done} / ${total}`;
   if (added > 0) {
-    // 最初に追加したレシートを選択（selectRec内でモバイル時はシートを閉じる）
     selectRec(receipts[0].id); setTab('dt');
     if (isMobile()) setBnavActive('dt');
   }
@@ -865,10 +866,8 @@ async function processFiles(files) {
     : `✓ ${added}枚すべて登録しました`;
   toast(msg, failed > 0);
 
-  // エラーがなければ5秒後に進捗を畳む、エラーありは開いたまま
-  if (failed === 0) {
-    setTimeout(() => { wrap.classList.remove('show'); }, 5000);
-  }
+  // 常に3秒後に進捗を畳む
+  setTimeout(() => { wrap.classList.remove('show'); batchRunning = false; }, 3000);
 } // end processFiles
 
 const toB64 = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(f); });
