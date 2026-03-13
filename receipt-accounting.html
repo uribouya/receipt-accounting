@@ -973,23 +973,31 @@ async function analyzeAI(b64, mime) {
   let lastErr = '';
   for (const model of MODELS) {
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1024,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-            { type: 'text', text: prompt }
-          ]}]
-        })
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
+      let resp;
+      try {
+        resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: [
+              { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+              { type: 'text', text: prompt }
+            ]}]
+          })
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const rawText = await resp.text();
       console.log('API response status:', resp.status, 'body length:', rawText.length, 'body:', rawText.slice(0,200));
       if (!resp.ok) {
@@ -1010,8 +1018,9 @@ async function analyzeAI(b64, mime) {
       if (start2===-1||end2===-1) { lastErr=`${model} JSON無し`; continue; }
       return JSON.parse(raw.slice(start2, end2+1));
     } catch(e) {
-      if (e.message.includes('APIキーが無効')) throw e;
-      lastErr = `${model} 例外: ${e.message.slice(0,100)}`;
+      if (e.message && e.message.includes('APIキーが無効')) throw e;
+      if (e.name === 'AbortError') { lastErr = `${model} タイムアウト(30秒)`; continue; }
+      lastErr = `${model} 例外: ${e.message ? e.message.slice(0,100) : String(e)}`;
     }
   }
   throw new Error(`全モデル失敗: ${lastErr.slice(0,200)}`);
