@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>法人レシート会計</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f4f0;--surface:#fff;--s2:#f0efe9;--s3:#e8e6dd;
+  --bd:#d8d5c8;--bd2:#c5c1b0;
+  --accent:#1a3a5c;--accent2:#2e6da4;--gold:#c8a84b;
+  --tx:#1a1a16;--tx2:#5a5a4a;--tx3:#9a9a88;
+  --red:#c0392b;--grn:#1a6b3c;--blu:#1a4a8c;
+  --grn2:#e8f5ee;--blu2:#e8eef8;--amb2:#f8f0e0;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;font-size:13px;}
+
+/* HEADER */
+.hdr{background:var(--accent);color:#fff;padding:0 20px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-m{width:30px;height:30px;background:var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:var(--accent);}
+.logo-n{font-size:14px;font-weight:700;}
+.logo-s{font-size:9px;opacity:.55;font-family:var(--mono);}
+.hkpi{display:flex;gap:28px;align-items:center;}
+.hkpi-i{text-align:right;}
+.hkpi-l{font-size:9px;opacity:.5;text-transform:uppercase;letter-spacing:1.5px;}
+.hkpi-v{font-size:17px;font-weight:700;font-family:var(--mono);color:#7dd3fc;}
+.hkpi-v.g{color:var(--gold);}
+.hact{display:flex;gap:6px;}
+.hb{padding:6px 13px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:'Noto Sans JP',sans-serif;transition:all .15s;display:flex;align-items:center;gap:5px;}
+.hb-o{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);}
+.hb-o:hover{background:rgba(255,255,255,.1);}
+.hb-g{background:var(--gold);color:var(--accent);}
+.hb-g:hover{filter:brightness(1.08);}
+
+/* LAYOUT */
+.main{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 54px);}
+
+/* LEFT */
+.left{background:var(--surface);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;}
+.uparea{margin:14px;border:2px dashed var(--bd2);border-radius:10px;padding:18px 12px;text-align:center;cursor:pointer;background:var(--s2);transition:all .2s;}
+.uparea:hover,.uparea.drag{border-color:var(--accent2);background:var(--blu2);}
+.up-ic{font-size:26px;margin-bottom:6px;}
+.up-t{font-size:13px;font-weight:700;color:var(--accent);}
+.up-s{font-size:11px;color:var(--tx3);margin-top:2px;}
+/* BATCH PROGRESS */
+.batch-wrap{margin:0 14px 12px;display:none;}
+.batch-wrap.show{display:block;}
+.batch-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.batch-title{font-size:11px;font-weight:700;color:var(--accent);}
+.batch-count{font-size:11px;font-family:var(--mono);color:var(--tx2);}
+.batch-bar-bg{height:6px;background:var(--s3);border-radius:3px;overflow:hidden;}
+.batch-bar{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .3s ease;}
+.batch-log{margin-top:8px;max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;}
+.batch-log::-webkit-scrollbar{width:3px;}
+.batch-log::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
+.blog-item{font-size:10px;padding:3px 8px;border-radius:4px;display:flex;align-items:center;gap:6px;}
+.blog-item.ok{background:var(--grn2);color:var(--grn);}
+.blog-item.err{background:#fef2f2;color:var(--red);}
+.blog-item.ing{background:var(--blu2);color:var(--blu);}
+.upbtns{display:flex;gap:8px;margin:0 14px 14px;}
+.sb{flex:1;padding:8px;border-radius:7px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:'Noto Sans JP',sans-serif;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;}
+.sb-p{background:var(--accent);color:#fff;}
+.sb-p:hover{background:var(--accent2);}
+.sb-s{background:var(--s2);color:var(--tx);border:1px solid var(--bd);}
+.sb-s:hover{background:var(--s3);}
+#fi,#ci{display:none;}
+
+.lh{padding:9px 14px 5px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--bd);}
+.lh-t{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--tx3);font-family:var(--mono);}
+.badge{background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;}
+.rlist{flex:1;overflow-y:auto;padding:4px 8px 8px;}
+.rlist::-webkit-scrollbar{width:3px;}
+.rlist::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px;}
+
+.rc{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .15s;background:var(--surface);position:relative;}
+.rc:hover{border-color:var(--accent2);background:var(--blu2);}
+.rc.active{border-color:var(--accent);background:var(--blu2);box-shadow:inset 3px 0 0 var(--accent);}
+.rc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.rc-store{font-size:13px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rc-total{font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent);white-space:nowrap;}
+.rc-mid{display:flex;justify-content:space-between;margin-top:3px;}
+.rc-acct{font-size:10px;color:var(--tx2);}
+.rc-date{font-size:10px;color:var(--tx3);font-family:var(--mono);}
+.rc-bot{display:flex;gap:4px;margin-top:6px;align-items:center;flex-wrap:wrap;}
+.chip{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;}
+.c-exp{background:#fef3c7;color:#92400e;}
+.c-ast{background:#dbeafe;color:#1e40af;}
+.c-t10{background:#dcfce7;color:#166534;}
+.c-t8{background:#d1fae5;color:#065f46;}
+.c-t0{background:#f3f4f6;color:#4b5563;}
+.c-tno{background:#fce7f3;color:#9d174d;}
+.delbtn{margin-left:auto;background:#fef2f2;border:1px solid #fecaca;color:#ef4444;cursor:pointer;font-size:11px;padding:4px 10px;border-radius:5px;font-weight:700;font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;}
+.delbtn:hover,.delbtn:active{background:#fee2e2;}
+.empty{text-align:center;padding:40px 16px;color:var(--tx3);}
+.empty-i{font-size:36px;opacity:.3;margin-bottom:8px;}
+
+/* RIGHT */
+.right{display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.toolbar{background:var(--surface);border-bottom:1px solid var(--bd);padding:9px 18px;display:flex;align-items:center;gap:10px;}
+.tb-t{font-size:13px;font-weight:700;flex:1;color:var(--accent);}
+.tabg{display:flex;background:var(--s2);border-radius:7px;border:1px solid var(--bd);overflow:hidden;}
+.tab{padding:6px 13px;background:none;border:none;font-size:11px;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;color:var(--tx2);transition:all .15s;white-space:nowrap;}
+.tab.active{background:var(--accent);color:#fff;}
+.content{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;}
+.content::-webkit-scrollbar{width:5px;}
+.content::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px;}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--bd);border-radius:10px;overflow:hidden;}
+.ch{padding:10px 15px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;background:var(--s2);}
+.ch-t{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--tx3);font-family:var(--mono);font-weight:600;}
+.cb{padding:14px;}
+
+/* FORM */
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.fg{display:flex;flex-direction:column;gap:4px;}
+.fg.s2{grid-column:span 2;}
+.fl{font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.8px;}
+.fi{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:7px 10px;color:var(--tx);font-size:12px;font-family:'Noto Sans JP',sans-serif;transition:border-color .15s;width:100%;}
+.fi:focus{outline:none;border-color:var(--accent2);background:var(--blu2);}
+select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239a9a88' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;cursor:pointer;}
+.fi-m{font-family:var(--mono);font-size:12px;}
+
+/* JOURNAL TABLE */
+.jtbl{width:100%;border-collapse:collapse;}
+.jtbl th{padding:8px 11px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);font-family:var(--mono);border-bottom:2px solid var(--bd);background:var(--s2);}
+.jtbl th.r,.jtbl td.r{text-align:right;}
+.jtbl td{padding:8px 11px;font-size:12px;border-bottom:1px solid var(--bd);vertical-align:middle;}
+.jtbl tr:last-child td{border-bottom:none;}
+.jtbl tfoot td{padding:9px 11px;font-weight:700;font-family:var(--mono);background:var(--s2);border-top:2px solid var(--bd);font-size:13px;}
+.dr{color:var(--red);font-weight:700;}
+.cr{color:var(--blu);font-weight:700;}
+.mn{font-family:var(--mono);}
+
+/* ITEMS TABLE */
+.itbl{width:100%;border-collapse:collapse;}
+.itbl th{padding:7px 9px;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);font-family:var(--mono);border-bottom:1px solid var(--bd);background:var(--s2);white-space:nowrap;}
+.itbl td{padding:5px 7px;border-bottom:1px solid var(--bd);}
+.itbl tr:last-child td{border-bottom:none;}
+.itbl tr:hover td{background:var(--s2);}
+.ii{background:transparent;border:none;color:var(--tx);font-size:12px;font-family:'Noto Sans JP',sans-serif;width:100%;padding:3px 4px;border-radius:3px;}
+.ii:hover,.ii:focus{background:var(--s2);outline:none;}
+.ii.mn{font-family:var(--mono);text-align:right;}
+.sub-row td{color:var(--tx2);font-size:11px;background:var(--s2);}
+.total-row td{font-weight:700;font-family:var(--mono);background:var(--grn2);color:var(--grn);font-size:14px;}
+.addrow{width:100%;padding:7px;border:1px dashed var(--bd2);background:var(--s2);color:var(--tx3);border-radius:6px;cursor:pointer;font-size:11px;font-family:'Noto Sans JP',sans-serif;margin-top:5px;}
+.addrow:hover{border-color:var(--accent2);color:var(--accent2);}
+.delit{background:none;border:none;color:var(--tx3);cursor:pointer;padding:2px;font-size:11px;}
+.delit:hover{color:var(--red);}
+
+/* OVERVIEW */
+.kg4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kc{background:var(--surface);border:1px solid var(--bd);border-radius:10px;padding:14px;}
+.kc-l{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--tx3);font-family:var(--mono);}
+.kc-v{font-size:20px;font-weight:700;font-family:var(--mono);margin-top:5px;}
+.kc-v.bl{color:var(--accent);}
+.kc-v.gn{color:var(--grn);}
+.kc-v.am{color:#8c6a1a;}
+.kc-s{font-size:10px;color:var(--tx3);margin-top:3px;}
+.arow{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.aname{width:160px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.acode{font-family:var(--mono);font-size:10px;color:var(--tx3);width:40px;}
+.abar-w{flex:1;background:var(--s2);border-radius:3px;height:6px;overflow:hidden;}
+.abar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent2),var(--accent));}
+.aamt{font-family:var(--mono);font-size:11px;color:var(--tx2);min-width:86px;text-align:right;}
+.mbars{display:flex;gap:10px;align-items:flex-end;height:96px;margin-top:12px;}
+.mb-i{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.mbar{width:100%;border-radius:4px 4px 0 0;min-height:3px;background:linear-gradient(180deg,var(--accent2),var(--accent));}
+.mb-l{font-size:9px;color:var(--tx3);}
+.mb-v{font-size:9px;color:var(--tx2);font-family:var(--mono);}
+.tg4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;}
+.tc{background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:12px;}
+.tr-rate{font-size:18px;font-weight:900;font-family:var(--mono);}
+.tr-base{font-size:11px;color:var(--tx2);margin-top:4px;}
+.tr-amt{font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent);margin-top:5px;}
+
+/* OVERLAY */
+.ov{display:none;position:fixed;inset:0;background:rgba(245,244,240,.88);backdrop-filter:blur(6px);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+.ov.show{display:flex;}
+.spin{width:38px;height:38px;border:3px solid var(--bd2);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.ov-t{font-size:14px;font-weight:700;color:var(--accent);}
+.ov-s{font-size:11px;color:var(--tx2);}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--accent);color:#fff;border-radius:8px;padding:11px 16px;font-size:12px;font-weight:700;transform:translateY(60px);opacity:0;transition:all .25s;z-index:9999;box-shadow:0 4px 16px rgba(26,58,92,.3);max-width:300px;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.err{background:var(--red);}
+
+/* ═══════════════════════════════
+   MOBILE STYLES (≤ 680px)
+   ボトムナビ＋全画面シート方式
+═══════════════════════════════ */
+@media(max-width:680px){
+  /* ヘッダーをコンパクトに */
+  .hdr{ padding:0 12px; height:50px; }
+  .logo-s{ display:none; }
+  .logo-n{ font-size:13px; }
+  .hkpi{ gap:12px; }
+  .hkpi-i:last-child{ display:none; } /* 仮払消費税は省略 */
+  .hkpi-l{ font-size:8px; }
+  .hkpi-v{ font-size:14px; }
+  .hact{ display:none; } /* ヘッダーボタン非表示→ボトムナビへ */
+
+  /* メインを縦1カラム・フル高さ */
+  .main{
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    height: calc(100dvh - 50px - 60px); /* ヘッダー＋ボトムナビ分 */
+    position: relative;
+  }
+
+  /* 左パネル（レシート追加シート）→デフォルト非表示 */
+  .left{
+    position: fixed;
+    bottom: 60px; left: 0; right: 0;
+    height: 70vh;
+    border-right: none;
+    border-top: 2px solid var(--accent);
+    border-radius: 20px 20px 0 0;
+    z-index: 150;
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 -4px 24px rgba(0,0,0,.15);
+  }
+  .left.open{ transform: translateY(0); }
+  .left-drag{
+    width: 40px; height: 4px; background: var(--bd2);
+    border-radius: 2px; margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* 右パネルがメインコンテンツ */
+  .right{
+    grid-column: 1; grid-row: 1;
+    height: 100%;
+  }
+
+  /* ツールバー */
+  .toolbar{ padding:8px 12px; gap:8px; }
+  .tb-t{ font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width:120px; }
+  .tabg{ flex-shrink:0; }
+  .tab{ padding:5px 10px; font-size:10px; }
+
+  /* コンテンツ余白を小さく */
+  .content{ padding:12px; gap:12px; }
+
+  /* 詳細ビューを1カラム */
+  .content > div[style*="grid-template-columns:1fr 1.5fr"]{
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* フォームグリッドを1カラムに */
+  .fg2{ grid-template-columns:1fr !important; }
+  .fg3{ grid-template-columns:1fr 1fr !important; }
+  .fg.s2{ grid-column: span 1 !important; }
+
+  /* KPIカードを2カラムに */
+  .kg4{ grid-template-columns:1fr 1fr; }
+  .kc-v{ font-size:16px; }
+
+  /* 概要グリッドを1カラムに */
+  .content > div[style*="grid-template-columns:1fr 1fr"]{
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* 仕訳テーブルスクロール */
+  .jtbl{ font-size:11px; }
+  .jtbl th,.jtbl td{ padding:6px 8px; }
+
+  /* 品目テーブル */
+  .itbl{ font-size:11px; }
+  .itbl th,.itbl td{ padding:4px 6px; }
+
+  /* 入力フィールドを大きく（タップしやすく） */
+  .fi{ padding:10px 12px; font-size:14px; }
+  select.fi{ padding:10px 28px 10px 12px; }
+  .ii{ font-size:13px; padding:5px 6px; }
+
+  /* ボトムナビ */
+  .bnav{
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--surface);
+    border-top: 1px solid var(--bd);
+    display: flex;
+    z-index: 200;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.08);
+  }
+  .bnav-btn{
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px;
+    background: none; border: none; cursor: pointer;
+    color: var(--tx3); font-family:'Noto Sans JP',sans-serif;
+    transition: color .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bnav-btn.active{ color: var(--accent); }
+  .bnav-btn.active .bnav-icon{ background:var(--blu2); border-radius:12px; }
+  .bnav-icon{ font-size:20px; width:36px; height:28px; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+  .bnav-label{ font-size:9px; font-weight:700; }
+
+  /* レシート一覧（シート内） */
+  .rlist{ padding:4px 10px 80px; } /* 下部余白を大きく */
+
+  /* バッチ進捗 */
+  .batch-wrap{ margin:0 12px 10px; }
+
+  /* 画像を縮小 */
+  .content img{ max-height:240px !important; }
+
+  /* オーバーレイ非表示（バッチログで代替） */
+  .ov{ display:none !important; }
+
+  /* シート閉じるボタン */
+  .sheet-close{
+    position:absolute; top:14px; right:16px;
+    background:var(--s2); border:1px solid var(--bd);
+    border-radius:20px; padding:4px 12px;
+    font-size:11px; font-weight:700; color:var(--tx2);
+    cursor:pointer; z-index:10;
+  }
+}
+
+/* タブレット */
+@media(min-width:681px) and (max-width:1024px){
+  .main{ grid-template-columns: 280px 1fr; }
+  .kg4{ grid-template-columns:1fr 1fr; }
+  .bnav{ display:none; }
+  .left-drag{ display:none; }
+}
+
+/* PC: ボトムナビ非表示 */
+@media(min-width:681px){
+  .bnav{ display:none !important; }
+  .left-drag{ display:none; }
+  .sheet-close{ display:none; }
+}
+
+/* APIキー設定モーダル */
+.apikey-modal{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.apikey-modal.hide{display:none;}
+.apikey-box{
+  background:var(--surface);border-radius:16px;
+  padding:28px 24px;width:100%;max-width:420px;
+  box-shadow:0 8px 40px rgba(0,0,0,.25);
+}
+.apikey-title{font-size:17px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.apikey-sub{font-size:12px;color:var(--tx2);margin-bottom:18px;line-height:1.6;}
+.apikey-input{
+  width:100%;box-sizing:border-box;
+  border:1.5px solid var(--bd);border-radius:8px;
+  padding:11px 14px;font-size:13px;font-family:var(--mono);
+  background:var(--s2);color:var(--tx);outline:none;
+  margin-bottom:12px;
+}
+.apikey-input:focus{border-color:var(--accent2);}
+.apikey-save{
+  width:100%;padding:12px;border:none;border-radius:8px;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:'Noto Sans JP',sans-serif;
+}
+.apikey-save:hover{background:var(--accent2);}
+.apikey-note{font-size:10px;color:var(--tx3);margin-top:10px;line-height:1.6;}
+.apikey-dot{width:7px;height:7px;border-radius:50%;background:#ef4444;display:inline-block;border-radius:50%;}
+.apikey-dot.ok{background:#22c55e;}
+.hb-key{font-size:11px;padding:5px 10px;cursor:pointer;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.1);color:#fff;font-family:'Noto Sans JP',sans-serif;}
+.hb-key:hover{background:rgba(255,255,255,.2);}
+
+/* 同期モーダル */
+.sync-modal{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.sync-modal.hide{display:none;}
+.sync-box{
+  background:var(--surface);border-radius:16px;
+  padding:24px 20px;width:100%;max-width:440px;
+  box-shadow:0 8px 40px rgba(0,0,0,.25);
+  max-height:90vh;overflow-y:auto;
+}
+.sync-title{font-size:16px;font-weight:700;color:var(--accent);margin-bottom:4px;}
+.sync-sub{font-size:11px;color:var(--tx2);margin-bottom:16px;line-height:1.6;}
+.sync-row{display:flex;gap:8px;margin-bottom:10px;}
+.sync-input{
+  flex:1;border:1.5px solid var(--bd);border-radius:8px;
+  padding:9px 12px;font-size:12px;font-family:var(--mono);
+  background:var(--s2);color:var(--tx);outline:none;
+}
+.sync-input:focus{border-color:var(--accent2);}
+.sync-btn{
+  padding:9px 14px;border:none;border-radius:8px;
+  font-size:12px;font-weight:700;cursor:pointer;
+  font-family:'Noto Sans JP',sans-serif;white-space:nowrap;
+}
+.sync-btn-p{background:var(--accent);color:#fff;}
+.sync-btn-p:hover{background:var(--accent2);}
+.sync-btn-s{background:var(--s2);color:var(--tx);border:1px solid var(--bd);}
+.sync-btn-s:hover{background:var(--s3);}
+.sync-divider{border:none;border-top:1px solid var(--bd);margin:14px 0;}
+.sync-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.sync-action-btn{
+  padding:11px 8px;border:1.5px solid var(--bd);border-radius:10px;
+  background:var(--s2);cursor:pointer;text-align:center;
+  font-family:'Noto Sans JP',sans-serif;transition:all .15s;
+}
+.sync-action-btn:hover{border-color:var(--accent2);background:var(--blu2);}
+.sync-action-btn .sab-ic{font-size:22px;margin-bottom:4px;}
+.sync-action-btn .sab-t{font-size:12px;font-weight:700;color:var(--accent);}
+.sync-action-btn .sab-s{font-size:10px;color:var(--tx3);}
+.sync-status{font-size:11px;padding:8px 10px;border-radius:6px;background:var(--s2);color:var(--tx2);min-height:32px;}
+.sync-status.ok{background:var(--grn2);color:var(--grn);}
+.sync-status.err{background:#fef2f2;color:var(--red);}
+.sync-note{font-size:10px;color:var(--tx3);line-height:1.6;margin-top:10px;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="logo">
+    <div class="logo-m">会</div>
+    <div>
+      <div class="logo-n">法人レシート会計 <span style="font-size:9px;opacity:0.5">v28</span></div>
+      <div class="logo-s">CORPORATE EXPENSE LEDGER</div>
+    </div>
+  </div>
+  <div class="hkpi">
+    <div class="hkpi-i"><div class="hkpi-l">件数</div><div class="hkpi-v" id="hC">0</div></div>
+    <div class="hkpi-i"><div class="hkpi-l">経費合計（税込）</div><div class="hkpi-v g" id="hT">¥0</div></div>
+    <div class="hkpi-i"><div class="hkpi-l">仮払消費税</div><div class="hkpi-v" id="hTx">¥0</div></div>
+  </div>
+  <div class="hact">
+    <button class="hb hb-o" onclick="exportJournalCSV()">📋 仕訳帳CSV</button>
+    <button class="hb hb-g" onclick="exportExcel()">📊 Excel出力</button>
+    <button class="hb-key" onclick="showSyncModal()" id="syncBtn">☁️ <span id="syncStatus">同期未設定</span></button>
+    <button class="hb-key" onclick="showApiKeyModal()" id="apikeyBtn">🔑 <span id="apikeyStatus">APIキー未設定</span></button>
+  </div>
+</div>
+
+<!-- 同期モーダル（iCloud Drive方式） -->
+<div class="sync-modal hide" id="syncModal">
+  <div class="sync-box">
+    <div class="sync-title">☁️ iCloud Drive 同期</div>
+    <div class="sync-sub">JSONファイルをiCloud Driveに保存することで<br>Mac・iPhone間でデータを共有できます。</div>
+
+    <hr class="sync-divider">
+
+    <!-- ステップ1: 保存 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+      <div style="font-size:12px;font-weight:700;color:var(--tx);">このデバイスからエクスポート</div>
+    </div>
+    <button class="sync-btn sync-btn-p" style="width:100%;padding:13px;font-size:13px;margin-bottom:6px;" onclick="exportJsonFile()">
+      💾 receipt-data.json を保存
+    </button>
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:4px;">📌 保存先: <b>iCloud Drive &gt; 書類</b> フォルダを選んでください</div>
+    <div class="sync-status" id="exportLog" style="margin-bottom:16px;">ボタンを押してJSONファイルを保存してください</div>
+
+    <hr class="sync-divider">
+
+    <!-- ステップ2: 読込 -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+      <div style="font-size:12px;font-weight:700;color:var(--tx);">別デバイスで読み込む</div>
+    </div>
+    <button class="sync-btn sync-btn-p" style="width:100%;padding:13px;font-size:13px;margin-bottom:6px;" onclick="document.getElementById('importFile').click()">
+      📂 receipt-data.json を読み込む
+    </button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importFromFile(event)">
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:4px;">📌 場所: <b>iCloud Drive &gt; 書類 &gt; receipt-data.json</b></div>
+    <div class="sync-status" id="importLog">別デバイスで保存したreceipt-data.jsonを読み込んでください</div>
+
+    <div class="sync-note" style="margin-top:14px;">
+      💡 <b>使い方</b><br>
+      Mac: 「保存」→ iCloud Drive/書類 に保存<br>
+      iPhone: 「読み込む」→ iCloud Drive/書類 の receipt-data.json を選択<br><br>
+      ⚠️ iCloudの同期が完了してからiPhoneで読み込んでください（数秒〜数十秒かかる場合があります）<br>
+      ⚠️ 取り込み時は重複レシートを自動スキップします
+    </div>
+
+    <button class="sync-btn sync-btn-s" style="width:100%;margin-top:12px;" onclick="document.getElementById('syncModal').classList.add('hide')">閉じる</button>
+  </div>
+</div>
+
+<!-- JSONペーストモーダル -->
+<div class="sync-modal hide" id="pasteJsonModal">
+  <div class="sync-box">
+    <div class="sync-title">📋 ClaudeのJSONを貼り付け</div>
+    <div class="sync-sub">Claudeチャットでレシートを解析して<br>返ってきたJSONをここに貼り付けてください</div>
+    <hr class="sync-divider">
+    <div class="sync-note" style="margin-bottom:10px;font-size:11px;">
+      💡 Claudeへ送るプロンプト（コピーして使用）:<br>
+      <span id="promptText" style="font-size:10px;color:#555;line-height:1.4;display:block;background:#f5f5f5;padding:6px;border-radius:6px;margin-top:4px;">このレシートを解析してJSONで返してください。形式：{"store":"支払先","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","memo":"摘要","total":0,"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"items":[{"name":"品目","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]} 勘定科目：タクシー電車→6100、接待→6200、社内会議→6210、食料品→6500軽減8、文房具→6310。JSONのみ返答。</span>
+      <button onclick="copyPrompt()" style="font-size:11px;margin-top:4px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff;">📋 プロンプトをコピー</button>
+    </div>
+    <textarea id="pasteJsonArea" style="width:100%;height:120px;border:1.5px solid #ddd;border-radius:8px;padding:8px;font-size:12px;resize:none;box-sizing:border-box;" placeholder='{"store":"...", "date":"2026-03-13", ...}'></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="sync-btn sync-btn-p" style="flex:2;padding:12px;" onclick="savePastedJson()">💾 登録</button>
+      <button class="sync-btn sync-btn-s" style="flex:1;padding:12px;" onclick="document.getElementById('pasteJsonModal').classList.add('hide')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- iPhoneへの保存ガイドモーダル -->
+<div class="sync-modal hide" id="saveGuideModal">
+  <div class="sync-box">
+    <div class="sync-title">📱 iPhoneに保存して使う</div>
+    <div class="sync-sub">ClaudeアプリではAI解析ができないため、<br>HTMLファイルをiPhoneに保存してSafariで開いてください。</div>
+    <hr class="sync-divider">
+    <div style="font-size:13px;line-height:2;color:var(--tx);">
+      <b>手順（1回だけ）:</b><br>
+      <span style="color:var(--accent);font-weight:700;">① </span>MacのClaudeチャットでHTMLファイルをダウンロード<br>
+      <span style="color:var(--accent);font-weight:700;">② </span>AirDropでiPhoneに送る<br>
+      <span style="color:var(--accent);font-weight:700;">③ </span>iPhoneで「Safariで開く」を選択<br>
+      <span style="color:var(--accent);font-weight:700;">④ </span>🔑 APIキーを設定 → AI解析が使えます<br>
+    </div>
+    <div class="sync-note" style="margin-top:12px;">
+      💡 SafariでAPIキーを設定すれば、以降はずっと自動解析できます。<br>
+      📲 データの同期は「同期」ボタンのiCloud Drive方式で行えます。
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="sync-btn sync-btn-s" style="flex:1;padding:12px;" onclick="document.getElementById('saveGuideModal').classList.add('hide')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手動入力モーダル（Artifactアプリ用） -->
+<div class="sync-modal hide" id="manualModal">
+  <div class="sync-box">
+    <div class="sync-title">✏️ 手動入力</div>
+    <div class="sync-sub" id="manualFilename"></div>
+    <div class="sync-note" style="margin-bottom:12px;">ClaudeアプリではAI自動解析ができません。<br>内容を手動で入力してください。</div>
+
+    <div style="display:grid;gap:8px;">
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">日付</div>
+        <input class="sync-input" type="date" id="mi-date">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">支払先</div>
+        <input class="sync-input" type="text" id="mi-store" placeholder="例: セブンイレブン">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">金額（税込）</div>
+        <input class="sync-input" type="number" id="mi-total" placeholder="1000">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">勘定科目</div>
+        <select class="sync-input" id="mi-acct" style="font-size:13px;"></select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">消費税区分</div>
+        <select class="sync-input" id="mi-tax" style="font-size:13px;">
+          <option value="10">課税10%</option>
+          <option value="8">軽減8%</option>
+          <option value="0">非課税</option>
+          <option value="no">不課税</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">摘要</div>
+        <input class="sync-input" type="text" id="mi-memo" placeholder="任意">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="sync-btn sync-btn-p" style="flex:2;padding:12px;" onclick="saveManualEntry()">💾 登録</button>
+      <button class="sync-btn sync-btn-s" style="flex:1;padding:12px;" onclick="document.getElementById('manualModal').classList.add('hide')">スキップ</button>
+    </div>
+  </div>
+</div>
+
+<!-- APIキー設定モーダル -->
+<div class="apikey-modal hide" id="apikeyModal">
+  <div class="apikey-box">
+    <div class="apikey-title">🔑 Anthropic APIキーの設定</div>
+    <div class="apikey-sub">レシートのAI自動解析に必要です。SafariでもClaudeアプリでも使えます。<br>キーはこの端末のみに保存され、外部送信はされません。</div>
+    <input class="apikey-input" type="password" id="apikeyInput" placeholder="sk-ant-..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="apikey-save" onclick="saveApiKey()">保存して使用する</button>
+    <div class="apikey-note">
+      ⚠️ APIキーは <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent2)">console.anthropic.com</a> で取得できます。<br>
+      キーはこのページのlocalStorageに保存されます。共有端末では使用後に削除してください。<br>
+      <span id="apikeyDelete" style="color:#ef4444;cursor:pointer;display:none;" onclick="deleteApiKey()">🗑️ 保存済みキーを削除する</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- LEFT -->
+  <div class="left" id="leftPanel">
+    <div class="left-drag"></div>
+    <button class="sheet-close" onclick="closeSheet()">✕ 閉じる</button>
+    <div class="uparea" id="dz" ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" onclick="document.getElementById('fi').click()">
+      <div class="up-ic">🧾</div>
+      <div class="up-t">レシートを読み込む</div>
+      <div class="up-s">複数枚同時選択OK・ドラッグ＆ドロップ対応</div>
+    </div>
+    <div class="upbtns">
+      <button class="sb sb-p" onclick="document.getElementById('fi').click()">🖼️ 画像選択（複数可）</button>
+      <button class="sb sb-s" onclick="document.getElementById('ci').click()">📸 カメラ</button>
+    </div>
+    <button class="sb" onclick="showPasteJsonModal()" style="width:100%;margin-top:8px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #81c784;border-radius:10px;padding:10px;font-size:13px;cursor:pointer;">📋 ClaudeのJSONを貼り付けて登録</button>
+    <input type="file" id="fi" accept="image/*" multiple onchange="onFile(event)">
+    <input type="file" id="ci" accept="image/*" capture="environment" onchange="onFile(event)">
+    <!-- バッチ進捗 -->
+    <div class="batch-wrap" id="batchWrap">
+      <div class="batch-header">
+        <div class="batch-title">📥 一括読み込み中</div>
+        <div class="batch-count" id="batchCount">0 / 0</div>
+      </div>
+      <div class="batch-bar-bg"><div class="batch-bar" id="batchBar" style="width:0%"></div></div>
+      <div class="batch-log" id="batchLog"></div>
+    </div>
+    <div class="lh">
+      <div class="lh-t">経費一覧</div>
+      <div class="badge" id="lc">0</div>
+    </div>
+    <div class="rlist" id="rlist">
+      <div class="empty"><div class="empty-i">📂</div><div>レシートを追加してください</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="toolbar">
+      <div class="tb-t" id="tbt">ダッシュボード</div>
+      <div class="tabg">
+        <button class="tab active" id="tOv" onclick="setTab('ov')">📊 概要</button>
+        <button class="tab" id="tDt" onclick="setTab('dt')">📝 伝票</button>
+        <button class="tab" id="tJr" onclick="setTab('jr')">📒 仕訳</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<!-- ボトムナビ（スマホのみ表示） -->
+<nav class="bnav" id="bnav">
+  <button class="bnav-btn active" id="bn-ov" onclick="mobileTab('ov')">
+    <div class="bnav-icon">📊</div>
+    <div class="bnav-label">概要</div>
+  </button>
+  <button class="bnav-btn" id="bn-add" onclick="toggleSheet()">
+    <div class="bnav-icon" style="font-size:26px">＋</div>
+    <div class="bnav-label">追加</div>
+  </button>
+  <button class="bnav-btn" id="bn-dt" onclick="mobileTab('dt')">
+    <div class="bnav-icon">📝</div>
+    <div class="bnav-label">伝票</div>
+  </button>
+  <button class="bnav-btn" id="bn-jr" onclick="mobileTab('jr')">
+    <div class="bnav-icon">📒</div>
+    <div class="bnav-label">仕訳</div>
+  </button>
+  <button class="bnav-btn" id="bn-sync" onclick="showSyncModal()">
+    <div class="bnav-icon" id="bn-sync-ic">☁️</div>
+    <div class="bnav-label">同期</div>
+  </button>
+  <button class="bnav-btn" id="bn-key" onclick="showApiKeyModal()">
+    <div class="bnav-icon" id="bn-key-ic">🔑</div>
+    <div class="bnav-label" id="bn-key-lb">APIキー</div>
+  </button>
+  <button class="bnav-btn" id="bn-ex" onclick="exportExcel()">
+    <div class="bnav-icon">📤</div>
+    <div class="bnav-label">出力</div>
+  </button>
+</nav>
+
+<!-- シート背景 -->
+<div id="backdrop" onclick="closeSheet()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:140;"></div>
+
+<div class="ov" id="ov">
+  <div class="spin"></div>
+  <div class="ov-t">AIがレシートを解析中…</div>
+  <div class="ov-s" id="ovs">勘定科目・消費税区分を自動判定しています</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════
+// 勘定科目マスタ（法人・販管費中心）
+// ══════════════════════════════
+const ACCT = {
+  '5110':{ name:'仕入高',        type:'cost',    tax:'10' },
+  '5120':{ name:'外注費',        type:'cost',    tax:'10' },
+  '6100':{ name:'旅費交通費',    type:'expense', tax:'10' },
+  '6110':{ name:'出張旅費',      type:'expense', tax:'10' },
+  '6200':{ name:'交際費',        type:'expense', tax:'10' },
+  '6210':{ name:'会議費',        type:'expense', tax:'10' },
+  '6220':{ name:'接待飲食費',    type:'expense', tax:'10' },
+  '6300':{ name:'消耗品費',      type:'expense', tax:'10' },
+  '6310':{ name:'事務用品費',    type:'expense', tax:'10' },
+  '6320':{ name:'荷造運賃',      type:'expense', tax:'10' },
+  '6400':{ name:'通信費',        type:'expense', tax:'10' },
+  '6410':{ name:'郵便費',        type:'expense', tax:'10' },
+  '6500':{ name:'福利厚生費',    type:'expense', tax:'10' },
+  '6510':{ name:'食事代（社内）', type:'expense', tax:'8'  },
+  '6600':{ name:'広告宣伝費',    type:'expense', tax:'10' },
+  '6700':{ name:'地代家賃',      type:'expense', tax:'10' },
+  '6800':{ name:'水道光熱費',    type:'expense', tax:'10' },
+  '6900':{ name:'修繕費',        type:'expense', tax:'10' },
+  '7000':{ name:'雑費',          type:'expense', tax:'10' },
+  '7100':{ name:'新聞図書費',    type:'expense', tax:'10' },
+  '7200':{ name:'保険料',        type:'expense', tax:'0'  },
+  '7300':{ name:'租税公課',      type:'expense', tax:'no' },
+  '7400':{ name:'減価償却費',    type:'expense', tax:'no' },
+  '1500':{ name:'仮払金',        type:'asset',   tax:'no' },
+  '1510':{ name:'立替金',        type:'asset',   tax:'no' },
+  '1520':{ name:'前払費用',      type:'asset',   tax:'no' },
+};
+
+const CR_ACCT = [
+  { code:'1000', name:'現金' },
+  { code:'1030', name:'小口現金' },
+  { code:'2100', name:'未払金（法人カード）' },
+  { code:'2110', name:'未払金（クレジット）' },
+  { code:'1010', name:'普通預金' },
+  { code:'2000', name:'買掛金' },
+];
+
+const TAX_LBL = { '10':'課税10%', '8':'軽減8%', '0':'非課税', 'no':'不課税（対象外）' };
+const TAX_CHIP = { '10':'c-t10', '8':'c-t8', '0':'c-t0', 'no':'c-tno' };
+
+// ══════════════════════════════
+// STATE
+// ══════════════════════════════
+let receipts = JSON.parse(localStorage.getItem('corp_r2') || '[]');
+let curId = null;
+let curTab = 'ov';
+
+// ローカル保存
+function save() {
+  localStorage.setItem('corp_r2', JSON.stringify(receipts));
+}
+const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+const fmt = n => '¥' + Math.round(Number(n)||0).toLocaleString('ja-JP');
+const fmtN = n => Math.round(Number(n)||0).toLocaleString('ja-JP');
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (err?' err':'');
+  setTimeout(() => el.className='toast', 3200);
+}
+function showOv(txt='') { /* 複数枚対応後は未使用 */ }
+function hideOv() { document.getElementById('ov').classList.remove('show'); }
+
+// ══════════════════════════════
+// FILE HANDLING
+// ══════════════════════════════
+function onDragOver(e) { e.preventDefault(); document.getElementById('dz').classList.add('drag'); }
+function onDragLeave() { document.getElementById('dz').classList.remove('drag'); }
+function onDrop(e) {
+  e.preventDefault(); document.getElementById('dz').classList.remove('drag');
+  const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (files.length) processFiles(files);
+}
+function onFile(e) {
+  // iPhoneはfile.typeが空やheicになることがある → MIMEチェックを緩めて受け入れ
+  const files = [...e.target.files].filter(f => {
+    const t = (f.type||'').toLowerCase();
+    // 明らかに非画像のみ除外
+    return !t.startsWith('video/') && !t.startsWith('audio/') && !t.startsWith('text/');
+  });
+  if (files.length) processFiles(files);
+  e.target.value='';
+}
+
+// バッチ処理（直列・最大20枚）
+const MAX_BATCH = 20;
+let batchRunning = false;
+
+async function processFiles(files) {
+  if (batchRunning) { toast('読み込み中です。完了後に追加してください', true); return; }
+  if (files.length > MAX_BATCH) {
+    toast(`一度に読み込めるのは最大${MAX_BATCH}枚です（${files.length}枚選択→先頭${MAX_BATCH}枚を処理）`, true);
+    files = files.slice(0, MAX_BATCH);
+  }
+  batchRunning = true;
+  const total = files.length;
+  let done = 0, added = 0, failed = 0;
+
+  // UIを表示
+  const wrap = document.getElementById('batchWrap');
+  const bar  = document.getElementById('batchBar');
+  const cnt  = document.getElementById('batchCount');
+  const log  = document.getElementById('batchLog');
+  wrap.classList.add('show');
+  bar.style.width = '0%';
+  log.innerHTML = '';
+  cnt.textContent = `0 / ${total}`;
+
+  function addLog(name, status, msg) {
+    const icons = { ok:'✅', err:'❌', ing:'⏳' };
+    const el = document.createElement('div');
+    el.className = `blog-item ${status}`;
+    el.textContent = `${icons[status]} ${name}${msg ? ' — ' + msg : ''}`;
+    log.prepend(el);
+  }
+
+  for (const file of files) {
+    const label = file.name.length > 20 ? file.name.slice(0,18)+'…' : file.name;
+    addLog(label, 'ing', 'AI解析中…');
+    try {
+      const { b64, mime } = await normalizeImage(file);
+      const data = await analyzeAI(b64, mime);
+      const rec = { id:genId(), img:b64, imgType:mime, createdAt:new Date().toISOString(), ...data };
+      receipts.unshift(rec);
+      added++;
+      // 最初のログ（ing）を ok に置き換え
+      log.firstChild.className = 'blog-item ok';
+      log.firstChild.textContent = `✅ ${label} — ${rec.store||'不明'} ${fmt(rec.total)}`;
+    } catch(e) {
+      // ClaudeアプリのArtifact環境では画像AI解析不可 → 手動入力モーダルへ
+      if (e.message === '__SAVE_TO_IPHONE__' || e.message === '__MANUAL_INPUT__') {
+        log.firstChild.className = 'blog-item err';
+        log.firstChild.textContent = `⚠️ ${label} — iPhoneに保存してSafariで開いてください`;
+        failed++;
+        done++;
+        bar.style.width = (done/total*100)+'%';
+        cnt.textContent = `${done} / ${total}`;
+        batchRunning = false;
+        showSaveGuideModal();
+        return;
+      }
+      const errMsg = e.message || '不明なエラー';
+      log.firstChild.className = 'blog-item err';
+      log.firstChild.textContent = `❌ ${label} — ${errMsg}`;
+      failed++;
+    }
+    done++;
+    bar.style.width = `${Math.round(done/total*100)}%`;
+    cnt.textContent = `${done} / ${total}`;
+    save(); renderList(); updateHeader();
+  }
+
+  batchRunning = false;
+  if (added > 0) {
+    // 最初に追加したレシートを選択（selectRec内でモバイル時はシートを閉じる）
+    selectRec(receipts[0].id); setTab('dt');
+    if (isMobile()) setBnavActive('dt');
+  }
+  const msg = failed > 0
+    ? `${added}枚登録・${failed}枚失敗`
+    : `✓ ${added}枚すべて登録しました`;
+  toast(msg, failed > 0);
+
+  // エラーがなければ5秒後に進捗を畳む、エラーありは開いたまま
+  if (failed === 0) {
+    setTimeout(() => { wrap.classList.remove('show'); }, 5000);
+  }
+} // end processFiles
+
+const toB64 = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(f); });
+
+// ══════════════════════════════
+// iPhone対応: 画像正規化
+// HEIC含め全形式をCanvas経由でJPEG変換 & リサイズ
+// ══════════════════════════════
+async function normalizeImage(file) {
+  const MAX_PX = 800;
+  const QUALITY = 0.72;
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const rawMime = file.type || 'image/jpeg';
+      const safeMime = ['image/jpeg','image/png','image/gif','image/webp'].includes(rawMime)
+        ? rawMime : 'image/jpeg';
+
+      const img = new Image();
+      img.onerror = () => {
+        // Canvas描画できない場合はそのまま返す
+        const b64 = dataUrl.split(',')[1] || dataUrl;
+        resolve({ b64, mime: safeMime });
+      };
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth || img.width || 800;
+          let h = img.naturalHeight || img.height || 600;
+          if (w > MAX_PX || h > MAX_PX) {
+            if (w >= h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+            else        { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const jpegDataUrl = canvas.toDataURL('image/jpeg', QUALITY);
+          const b64 = jpegDataUrl.split(',')[1];
+          if (!b64) throw new Error('canvas変換失敗');
+          resolve({ b64, mime: 'image/jpeg' });
+        } catch(err) {
+          // Canvas失敗時はオリジナルをそのまま使う
+          const b64 = dataUrl.split(',')[1] || dataUrl;
+          resolve({ b64, mime: safeMime });
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ══════════════════════════════
+// AI
+// ══════════════════════════════
+async function analyzeAI(b64, mime) {
+  const acctList = Object.entries(ACCT)
+    .map(([c,a]) => `${c}:${a.name}`)
+    .join(', ');
+
+  const prompt = `あなたは日本の法人会計・経費精算の専門家です。
+このレシート画像を解析し、JSONのみで回答してください。
+説明文・マークダウン・コードブロックは不要です。
+最初の文字を{、最後の文字を}にしてください。
+
+利用可能な勘定科目: ${acctList}
+
+返すJSON:
+{"store":"支払先名","date":"YYYY-MM-DD","accountCode":"科目コード","taxType":"10か8か0かno","crAccountCode":"2100","memo":"摘要30字以内","items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"コード","taxType":"10"}],"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"total":0}
+
+科目:タクシー電車→6100課税10、接待→6200課税10、社内会議飲食→6210、食料品→6500軽減8、文房具→6310、切手印紙→7300不課税no。金額は整数。`;
+
+  const apiKey = getApiKey();
+  // Artifact環境の判定:
+  // - window.__anthropic_artifact_id が存在する（Artifactプロキシ）
+  // - またはAPIキーが未設定（Artifact内ではAPIキー不要のため）
+  // Safari外部環境: APIキーが設定されている場合は外部モードで動作
+  const isArtifact = !!(window.__anthropic_artifact_id) || !apiKey;
+
+  // Artifact環境の判定: window.claude オブジェクトが存在するかどうか
+  const useArtifactAPI = typeof window.claude !== 'undefined' && typeof window.claude.complete === 'function';
+
+  // APIキーがあれば環境問わずfetch直接（Safari・Claudeアプリ共通）
+  // APIキーなし・Artifact環境 → 手動入力
+  // ClaudeアプリのArtifact（window.claude存在）かつAPIキーなし → ガイド
+  if (useArtifactAPI && !apiKey) {
+    throw new Error('__SAVE_TO_IPHONE__');
+  }
+  // file://環境はfetchブロックされる
+  if (location.protocol === 'file:') {
+    throw new Error('ローカルファイルから開いています。「アーティファクトを公開」からSafariで開いてください。');
+  }
+  // APIキー必須
+  if (!apiKey) {
+    throw new Error('APIキーが未設定です。🔑ボタンから設定してください。');
+  }
+  const MODELS = ['claude-haiku-4-5-20251001', 'claude-3-5-haiku-20241022'];
+  let lastErr = '';
+  for (const model of MODELS) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+            { type: 'text', text: prompt }
+          ]}]
+        })
+      });
+      const rawText = await resp.text();
+      console.log('API response status:', resp.status, 'body length:', rawText.length, 'body:', rawText.slice(0,200));
+      if (!resp.ok) {
+        lastErr = `${model} HTTP${resp.status}: ${rawText.slice(0,200)}`;
+        if (resp.status === 401) throw new Error('APIキーが無効です。🔑ボタンから再設定してください。');
+        continue;
+      }
+      if (!rawText || rawText.trim() === '') {
+        lastErr = `${model} 空レスポンス (status:${resp.status})`;
+        continue;
+      }
+      let d;
+      try { d = JSON.parse(rawText); } catch(pe) { lastErr = `${model} パース失敗: ${rawText.slice(0,300)}`; continue; }
+      if (!d.content?.[0]?.text) { lastErr = `${model} 応答空: ${d.stop_reason}`; continue; }
+      let raw = d.content[0].text.trim();
+      raw = raw.replace(/^```[\w]*\n?/i,'').replace(/\n?```$/i,'').trim();
+      const start2 = raw.indexOf('{'), end2 = raw.lastIndexOf('}');
+      if (start2===-1||end2===-1) { lastErr=`${model} JSON無し`; continue; }
+      return JSON.parse(raw.slice(start2, end2+1));
+    } catch(e) {
+      if (e.message.includes('APIキーが無効')) throw e;
+      lastErr = `${model} 例外: ${e.message.slice(0,100)}`;
+    }
+  }
+  throw new Error(`全モデル失敗: ${lastErr.slice(0,200)}`);
+}
+
+// ══════════════════════════════
+// LIST
+// ══════════════════════════════
+function renderList() {
+  const el = document.getElementById('rlist');
+  document.getElementById('lc').textContent = receipts.length;
+  if (!receipts.length) { el.innerHTML='<div class="empty"><div class="empty-i">📂</div><div>レシートを追加してください</div></div>'; return; }
+  el.innerHTML = receipts.map(r => {
+    const a = ACCT[r.accountCode];
+    const tt = r.taxType||'10';
+    return `<div class="rc ${curId===r.id?'active':''}" onclick="selectRec('${r.id}')">
+      <div class="rc-top">
+        <div class="rc-store">${esc(r.store||'不明')}</div>
+        <div class="rc-total">${fmt(r.total)}</div>
+      </div>
+      <div class="rc-mid">
+        <div class="rc-acct">${a?a.name:'—'}</div>
+        <div class="rc-date">${r.date||''}</div>
+      </div>
+      <div class="rc-bot">
+        ${a?`<span class="chip ${a.type==='asset'?'c-ast':'c-exp'}">${r.accountCode} ${a.name}</span>`:''}
+        <span class="chip ${TAX_CHIP[tt]||'c-t0'}">${TAX_LBL[tt]||tt}</span>
+        <button class="delbtn" onclick="delRec('${r.id}',event)" title="削除">🗑 削除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function delRec(id, e) {
+  e.stopPropagation();
+  // iPhoneではconfirm()が動作しない場合があるため直接削除
+  receipts = receipts.filter(r => r.id !== id);
+  if (curId === id) { curId = null; setTab('ov'); }
+  save(); renderList(); updateHeader();
+  toast('🗑 削除しました');
+}
+
+function selectRec(id) {
+  curId = id;
+  renderList();
+  const r = receipts.find(r=>r.id===id);
+  if (r) document.getElementById('tbt').textContent = `${r.store||'不明'} ／ ${r.date||''}`;
+  if (curTab !== 'ov') renderTab();
+  else setTab('dt');
+  // モバイル: シートを閉じてボトムナビ「伝票」をアクティブに
+  if (isMobile()) { closeSheet(); setBnavActive('dt'); }
+}
+
+// ══════════════════════════════
+// TABS
+// ══════════════════════════════
+function setTab(t) {
+  curTab = t;
+  ['ov','dt','jr'].forEach(x => document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1))?.classList.toggle('active', x===t));
+  renderTab();
+}
+function renderTab() {
+  if (curTab==='ov') renderOverview();
+  else if (curTab==='dt') renderDetail();
+  else if (curTab==='jr') renderJournal();
+}
+
+// ══════════════════════════════
+// DETAIL（伝票入力）
+// ══════════════════════════════
+function acctOpts(sel) {
+  return Object.entries(ACCT).map(([c,a]) => `<option value="${c}" ${sel===c?'selected':''}>${c} ${a.name}</option>`).join('');
+}
+function crOpts(sel) {
+  return CR_ACCT.map(a => `<option value="${a.code}" ${sel===a.code?'selected':''}>${a.code} ${a.name}</option>`).join('');
+}
+function taxOpts(sel) {
+  return Object.entries(TAX_LBL).map(([k,v]) => `<option value="${k}" ${sel===k?'selected':''}>${v}</option>`).join('');
+}
+
+function renderDetail() {
+  const el = document.getElementById('content');
+  const r = receipts.find(r=>r.id===curId);
+  if (!r) { el.innerHTML='<div style="text-align:center;padding:60px;color:var(--tx3)">左側のリストからレシートを選択してください</div>'; return; }
+
+  el.innerHTML = `
+  <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:14px">
+    <div class="card">
+      <div class="ch"><div class="ch-t">📷 レシート原本</div></div>
+      <div class="cb">
+        <div style="border-radius:8px;overflow:hidden;background:#111;display:flex;align-items:center;justify-content:center;max-height:380px">
+          ${r.img?`<img src="data:${r.imgType};base64,${r.img}" style="max-width:100%;max-height:380px;object-fit:contain">`
+                 :`<div style="padding:40px;color:var(--tx3);text-align:center">画像なし</div>`}
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><div class="ch-t">📝 伝票情報</div></div>
+      <div class="cb">
+        <div class="fg2">
+          <div class="fg">
+            <div class="fl">取引日付</div>
+            <input class="fi fi-m" type="date" value="${r.date||''}" onchange="upd('${r.id}','date',this.value)">
+          </div>
+          <div class="fg">
+            <div class="fl">支払先</div>
+            <input class="fi" type="text" value="${esc(r.store||'')}" onchange="upd('${r.id}','store',this.value)" placeholder="店名・会社名">
+          </div>
+          <div class="fg s2">
+            <div class="fl">借方勘定科目</div>
+            <select class="fi" onchange="upd('${r.id}','accountCode',this.value)">${acctOpts(r.accountCode)}</select>
+          </div>
+          <div class="fg s2">
+            <div class="fl">貸方勘定科目（支払方法）</div>
+            <select class="fi" onchange="upd('${r.id}','crAccountCode',this.value)">${crOpts(r.crAccountCode)}</select>
+          </div>
+          <div class="fg">
+            <div class="fl">消費税区分</div>
+            <select class="fi" onchange="upd('${r.id}','taxType',this.value)">${taxOpts(r.taxType)}</select>
+          </div>
+          <div class="fg">
+            <div class="fl">税込合計</div>
+            <input class="fi fi-m" type="number" value="${r.total||0}" onchange="upd('${r.id}','total',+this.value)">
+          </div>
+          <div class="fg">
+            <div class="fl">税抜金額</div>
+            <input class="fi fi-m" type="number" value="${r.subtotalExTax||0}" onchange="upd('${r.id}','subtotalExTax',+this.value)">
+          </div>
+          <div class="fg">
+            <div class="fl">消費税額（10%）</div>
+            <input class="fi fi-m" type="number" value="${r.taxAmount10||0}" onchange="upd('${r.id}','taxAmount10',+this.value)">
+          </div>
+          <div class="fg s2">
+            <div class="fl">摘要（伝票記載）</div>
+            <input class="fi" type="text" value="${esc(r.memo||'')}" onchange="upd('${r.id}','memo',this.value)" placeholder="業務目的・相手先など">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ch-t">🛒 明細（品目）</div></div>
+    <div style="overflow-x:auto">
+      <table class="itbl">
+        <thead><tr>
+          <th>品目名</th><th>勘定科目</th><th>消費税区分</th>
+          <th style="text-align:right">数量</th><th style="text-align:right">単価</th>
+          <th style="text-align:right">金額</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${(r.items||[]).map((item,i) => `
+          <tr>
+            <td><input class="ii" value="${esc(item.name||'')}" onchange="updI('${r.id}',${i},'name',this.value)" placeholder="品目名" style="min-width:120px"></td>
+            <td><select class="ii" style="font-size:11px;min-width:130px" onchange="updI('${r.id}',${i},'accountCode',this.value)">
+              <option value="">—</option>${acctOpts(item.accountCode)}</select></td>
+            <td><select class="ii" style="font-size:11px" onchange="updI('${r.id}',${i},'taxType',this.value)">${taxOpts(item.taxType)}</select></td>
+            <td><input class="ii mn" type="number" value="${item.qty||1}" onchange="updI('${r.id}',${i},'qty',+this.value)" style="width:52px"></td>
+            <td><input class="ii mn" type="number" value="${item.unitPrice||0}" onchange="updI('${r.id}',${i},'unitPrice',+this.value)" style="width:78px"></td>
+            <td><input class="ii mn" type="number" value="${item.price||0}" onchange="updI('${r.id}',${i},'price',+this.value)" style="width:84px"></td>
+            <td><button class="delit" onclick="remItem('${r.id}',${i})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">税抜小計</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.subtotalExTax)}</td><td></td></tr>
+          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">消費税（10%）</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.taxAmount10)}</td><td></td></tr>
+          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">消費税（8%）</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.taxAmount8)}</td><td></td></tr>
+          <tr class="total-row"><td colspan="5" style="text-align:right;padding:9px 11px">合計（税込）</td><td style="text-align:right;font-family:var(--mono);font-size:15px;color:var(--grn);padding:9px 11px">${fmt(r.total)}</td><td></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div style="padding:0 14px 12px">
+      <button class="addrow" onclick="addItem('${r.id}')">＋ 品目を追加</button>
+    </div>
+  </div>`;
+}
+
+function upd(id, f, v) { const r=receipts.find(r=>r.id===id); if(r){r[f]=v;save();renderList();updateHeader();} }
+function updI(id, i, f, v) { const r=receipts.find(r=>r.id===id); if(r?.items?.[i]){r.items[i][f]=v;save();} }
+function addItem(id) {
+  const r=receipts.find(r=>r.id===id); if(!r)return;
+  if(!r.items)r.items=[];
+  r.items.push({name:'',qty:1,unitPrice:0,price:0,accountCode:r.accountCode||'',taxType:r.taxType||'10'});
+  save(); renderDetail();
+}
+function remItem(id, i) { const r=receipts.find(r=>r.id===id); if(r?.items){r.items.splice(i,1);save();renderDetail();} }
+
+// ══════════════════════════════
+// JOURNAL（仕訳帳）
+// ══════════════════════════════
+function buildEntries(r) {
+  const a = ACCT[r.accountCode];
+  const cr = CR_ACCT.find(x=>x.code===r.crAccountCode)||CR_ACCT[0];
+  const total = r.total||0;
+  const exTax = r.subtotalExTax||total;
+  const tx10 = r.taxAmount10||0;
+  const tx8  = r.taxAmount8||0;
+  const taxTotal = tx10 + tx8;
+  const drRows = [{ dr:a?.name||'諸口', drC:r.accountCode||'', amt:exTax }];
+  if (taxTotal>0) drRows.push({ dr:'仮払消費税等', drC:'1180', amt:taxTotal });
+  const crRows = [{ cr:cr.name, crC:cr.code, amt:total }];
+  return { drRows, crRows };
+}
+
+function renderJournal() {
+  const el = document.getElementById('content');
+  if (!receipts.length) { el.innerHTML='<div style="text-align:center;padding:60px;color:var(--tx3)">仕訳データがありません</div>'; return; }
+  const list = curId ? receipts.filter(r=>r.id===curId) : receipts;
+  const allLink = curId ? `<a href="#" onclick="curId=null;renderJournal();return false" style="color:var(--accent2);font-size:11px">全件表示 →</a>` : '';
+
+  let rows = '';
+  list.forEach(r => {
+    const { drRows, crRows } = buildEntries(r);
+    const len = Math.max(drRows.length, crRows.length);
+    for (let i=0; i<len; i++) {
+      const dr = drRows[i]||{};
+      const cr = crRows[i]||{};
+      rows += `<tr>
+        <td class="mn" style="color:var(--tx3);white-space:nowrap">${i===0?(r.date||''):''}</td>
+        <td class="dr">${esc(dr.dr||'')}</td>
+        <td class="mn" style="color:var(--tx3);font-size:10px">${dr.drC||''}</td>
+        <td class="r mn">${dr.amt?fmtN(dr.amt):''}</td>
+        <td class="cr">${esc(cr.cr||'')}</td>
+        <td class="mn" style="color:var(--tx3);font-size:10px">${cr.crC||''}</td>
+        <td class="r mn">${cr.amt?fmtN(cr.amt):''}</td>
+        <td>${i===0?`<span class="chip ${TAX_CHIP[r.taxType]||'c-t0'}">${TAX_LBL[r.taxType]||''}</span>`:''}</td>
+        <td style="color:var(--tx2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i===0?esc(r.memo||r.store||''):''}</td>
+      </tr>`;
+    }
+    rows += `<tr><td colspan="9" style="height:3px;background:var(--s2)"></td></tr>`;
+  });
+
+  const drTotal = list.reduce((s,r)=>{ const {drRows}=buildEntries(r); return s+drRows.reduce((a,x)=>a+(x.amt||0),0); }, 0);
+  const crTotal = list.reduce((s,r)=>{ const {crRows}=buildEntries(r); return s+crRows.reduce((a,x)=>a+(x.amt||0),0); }, 0);
+
+  el.innerHTML = `<div class="card">
+    <div class="ch"><div class="ch-t">📒 仕訳帳 ${curId?'（選択伝票）':'（全件）'}</div>${allLink}</div>
+    <div style="overflow-x:auto">
+    <table class="jtbl">
+      <thead><tr>
+        <th>日付</th><th>借方科目</th><th>コード</th><th class="r">借方金額</th>
+        <th>貸方科目</th><th>コード</th><th class="r">貸方金額</th>
+        <th>税区分</th><th>摘要</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="3">合計</td><td class="r">${fmtN(drTotal)}</td>
+        <td colspan="2"></td><td class="r">${fmtN(crTotal)}</td>
+        <td colspan="2"></td>
+      </tr></tfoot>
+    </table>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════
+// OVERVIEW
+// ══════════════════════════════
+function renderOverview() {
+  const el = document.getElementById('content');
+  if (!receipts.length) {
+    el.innerHTML='<div style="text-align:center;padding:80px;color:var(--tx3)"><div style="font-size:52px;opacity:.2;margin-bottom:14px">📊</div><div>レシートを追加すると集計が表示されます</div></div>';
+    return;
+  }
+  const total = receipts.reduce((s,r)=>s+(r.total||0),0);
+  const tax   = receipts.reduce((s,r)=>s+(r.taxAmount10||0)+(r.taxAmount8||0),0);
+  const now   = new Date();
+  const mk    = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const mRecs = receipts.filter(r=>r.date?.startsWith(mk));
+  const mTot  = mRecs.reduce((s,r)=>s+(r.total||0),0);
+  const avg   = Math.round(total/receipts.length);
+
+  // 科目別
+  const aMap={};
+  receipts.forEach(r=>{ const c=r.accountCode||'0000'; aMap[c]=(aMap[c]||0)+(r.total||0); });
+  const maxA = Math.max(...Object.values(aMap),1);
+
+  // 月別（6か月）
+  const months={};
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    months[key]={label:`${d.getMonth()+1}月`,total:0};
+  }
+  receipts.forEach(r=>{ if(r.date&&months[r.date.slice(0,7)])months[r.date.slice(0,7)].total+=(r.total||0); });
+  const maxM=Math.max(...Object.values(months).map(m=>m.total),1);
+
+  // 税区分別
+  const txB={'10':0,'8':0,'0':0,'no':0};
+  receipts.forEach(r=>{ const t=r.taxType||'10'; txB[t]=(txB[t]||0)+(r.total||0); });
+
+  el.innerHTML=`
+  <div class="kg4">
+    <div class="kc"><div class="kc-l">経費合計（税込）</div><div class="kc-v bl">${fmt(total)}</div><div class="kc-s">${receipts.length} 件</div></div>
+    <div class="kc"><div class="kc-l">今月の経費</div><div class="kc-v gn">${fmt(mTot)}</div><div class="kc-s">${mRecs.length} 件</div></div>
+    <div class="kc"><div class="kc-l">仮払消費税（控除対象）</div><div class="kc-v am">${fmt(tax)}</div><div class="kc-s">入力税額合計</div></div>
+    <div class="kc"><div class="kc-l">1件あたり平均</div><div class="kc-v" style="color:var(--tx2)">${fmt(avg)}</div><div class="kc-s">平均経費単価</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="card">
+      <div class="ch"><div class="ch-t">📒 勘定科目別集計</div></div>
+      <div class="cb">
+        ${Object.entries(aMap).sort((a,b)=>b[1]-a[1]).map(([c,v])=>{
+          const a=ACCT[c];
+          return `<div class="arow">
+            <div class="acode">${c}</div>
+            <div class="aname">${a?a.name:'不明'}</div>
+            <div class="abar-w"><div class="abar" style="width:${Math.round(v/maxA*100)}%"></div></div>
+            <div class="aamt">${fmt(v)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><div class="ch-t">📅 月別支出</div></div>
+      <div class="cb">
+        <div class="mbars">
+          ${Object.values(months).map(m=>`
+            <div class="mb-i">
+              <div class="mb-v">${m.total>0?fmt(m.total):''}</div>
+              <div class="mbar" style="height:${Math.max(3,Math.round(m.total/maxM*88))}px"></div>
+              <div class="mb-l">${m.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ch-t">🧮 消費税区分別集計（インボイス対応）</div></div>
+    <div class="cb">
+      <div class="tg4">
+        <div class="tc"><div class="kc-l">課税（標準税率10%）</div><div class="tr-rate" style="color:var(--grn)">10%</div><div class="tr-base">対象金額: ${fmt(txB['10'])}</div><div class="tr-amt">消費税: ${fmt(Math.round(txB['10']/1.1*0.1))}</div></div>
+        <div class="tc"><div class="kc-l">課税（軽減税率8%）</div><div class="tr-rate" style="color:#8c6a1a">8%</div><div class="tr-base">対象金額: ${fmt(txB['8'])}</div><div class="tr-amt">消費税: ${fmt(Math.round(txB['8']/1.08*0.08))}</div></div>
+        <div class="tc"><div class="kc-l">非課税取引</div><div class="tr-rate" style="color:var(--tx2)">非課税</div><div class="tr-base">対象金額: ${fmt(txB['0'])}</div><div class="tr-amt">消費税: —</div></div>
+        <div class="tc"><div class="kc-l">不課税（対象外）</div><div class="tr-rate" style="color:var(--red)">対象外</div><div class="tr-base">対象金額: ${fmt(txB['no'])}</div><div class="tr-amt">消費税: —</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════
+// HEADER
+// ══════════════════════════════
+function updateHeader() {
+  const total=receipts.reduce((s,r)=>s+(r.total||0),0);
+  const tax=receipts.reduce((s,r)=>s+(r.taxAmount10||0)+(r.taxAmount8||0),0);
+  document.getElementById('hC').textContent=receipts.length;
+  document.getElementById('hT').textContent=fmt(total);
+  document.getElementById('hTx').textContent=fmt(tax);
+}
+
+// ══════════════════════════════
+// EXCEL EXPORT
+// ══════════════════════════════
+function exportExcel() {
+  if (!receipts.length) { toast('データがありません', true); return; }
+  const wb = XLSX.utils.book_new();
+
+  // シート1: 経費一覧
+  const ws1data = [
+    ['法人経費集計表'],
+    ['出力日時', new Date().toLocaleString('ja-JP')],
+    [],
+    ['No','取引日付','支払先','借方科目コード','借方科目名','貸方科目','消費税区分','摘要','税抜金額','消費税(10%)','消費税(8%)','合計(税込)'],
+    ...receipts.map((r,i)=>{
+      const a=ACCT[r.accountCode];
+      const cr=CR_ACCT.find(x=>x.code===r.crAccountCode);
+      return [i+1,r.date||'',r.store||'',r.accountCode||'',a?a.name:'',cr?cr.name:'',TAX_LBL[r.taxType]||'',r.memo||'',
+        r.subtotalExTax||0,r.taxAmount10||0,r.taxAmount8||0,r.total||0];
+    }),
+    [],
+    ['','','','','','','','合計',
+      receipts.reduce((s,r)=>s+(r.subtotalExTax||0),0),
+      receipts.reduce((s,r)=>s+(r.taxAmount10||0),0),
+      receipts.reduce((s,r)=>s+(r.taxAmount8||0),0),
+      receipts.reduce((s,r)=>s+(r.total||0),0)]
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1data);
+  ws1['!cols']=[{wch:4},{wch:12},{wch:20},{wch:8},{wch:16},{wch:18},{wch:12},{wch:28},{wch:12},{wch:12},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws1, '経費一覧');
+
+  // シート2: 仕訳帳
+  const jRows=[
+    ['仕訳帳'],['出力日時',new Date().toLocaleString('ja-JP')],[],
+    ['取引日付','借方科目コード','借方科目名','借方金額','貸方科目コード','貸方科目名','貸方金額','消費税区分','摘要'],
+    ...receipts.flatMap(r=>{
+      const {drRows,crRows}=buildEntries(r);
+      const len=Math.max(drRows.length,crRows.length);
+      return Array.from({length:len},(_,i)=>{
+        const dr=drRows[i]||{}; const cr=crRows[i]||{};
+        return [i===0?r.date:'',dr.drC||'',dr.dr||'',dr.amt||'',cr.crC||'',cr.cr||'',cr.amt||'',
+          i===0?(TAX_LBL[r.taxType]||''):'',i===0?(r.memo||r.store||''):''];
+      });
+    })
+  ];
+  const ws2=XLSX.utils.aoa_to_sheet(jRows);
+  ws2['!cols']=[{wch:12},{wch:8},{wch:18},{wch:12},{wch:8},{wch:20},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws2, '仕訳帳');
+
+  // シート3: 科目別集計
+  const agg={};
+  receipts.forEach(r=>{
+    const c=r.accountCode||'0000';
+    if(!agg[c])agg[c]={code:c,name:ACCT[c]?.name||'不明',count:0,exTax:0,tax10:0,tax8:0,total:0};
+    agg[c].count++;
+    agg[c].exTax+=(r.subtotalExTax||0);
+    agg[c].tax10+=(r.taxAmount10||0);
+    agg[c].tax8+=(r.taxAmount8||0);
+    agg[c].total+=(r.total||0);
+  });
+  const ws3data=[
+    ['勘定科目別集計'],[],
+    ['科目コード','科目名','件数','税抜金額','消費税(10%)','消費税(8%)','合計(税込)'],
+    ...Object.values(agg).sort((a,b)=>b.total-a.total).map(a=>[a.code,a.name,a.count,a.exTax,a.tax10,a.tax8,a.total])
+  ];
+  const ws3=XLSX.utils.aoa_to_sheet(ws3data);
+  ws3['!cols']=[{wch:8},{wch:20},{wch:6},{wch:14},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws3, '科目別集計');
+
+  // シート4: 明細（品目）
+  const detRows=[
+    ['品目明細'],[],
+    ['No','日付','支払先','品目名','勘定科目','消費税区分','数量','単価','金額'],
+    ...receipts.flatMap((r,ri)=>(r.items||[]).map(item=>[
+      ri+1,r.date||'',r.store||'',item.name||'',
+      ACCT[item.accountCode]?.name||'',TAX_LBL[item.taxType]||'',
+      item.qty||1,item.unitPrice||0,item.price||0
+    ]))
+  ];
+  const ws4=XLSX.utils.aoa_to_sheet(detRows);
+  ws4['!cols']=[{wch:4},{wch:12},{wch:20},{wch:22},{wch:16},{wch:12},{wch:6},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws4, '品目明細');
+
+  XLSX.writeFile(wb, `法人経費_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('✓ Excelを出力しました（4シート）');
+}
+
+// ══════════════════════════════
+// CSV JOURNAL
+// ══════════════════════════════
+function exportJournalCSV() {
+  if (!receipts.length) { toast('データがありません', true); return; }
+  const lines=[
+    '取引日付,借方科目コード,借方科目名,借方金額,貸方科目コード,貸方科目名,貸方金額,消費税区分,摘要',
+    ...receipts.flatMap(r=>{
+      const {drRows,crRows}=buildEntries(r);
+      const len=Math.max(drRows.length,crRows.length);
+      return Array.from({length:len},(_,i)=>{
+        const dr=drRows[i]||{}; const cr=crRows[i]||{};
+        return `${i===0?r.date:''},${dr.drC||''},${dr.dr||''},${dr.amt||''},${cr.crC||''},${cr.cr||''},${cr.amt||''},${i===0?(TAX_LBL[r.taxType]||''):''},"${i===0?(r.memo||r.store||''):''}"`
+      });
+    })
+  ];
+  const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`仕訳帳_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('✓ 仕訳帳CSVを出力しました');
+}
+
+// ══════════════════════════════
+// GitHub Gist 同期
+// ══════════════════════════════
+// ══════════════════════════════
+// 手動入力（Artifactアプリ用）
+// ══════════════════════════════
+let _manualB64 = null, _manualMime = null;
+
+function showPasteJsonModal() {
+  document.getElementById('pasteJsonArea').value = '';
+  document.getElementById('pasteJsonModal').classList.remove('hide');
+}
+
+function copyPrompt() {
+  const text = document.getElementById('promptText').textContent;
+  navigator.clipboard.writeText(text).then(() => toast('📋 プロンプトをコピーしました'));
+}
+
+function savePastedJson() {
+  const raw = document.getElementById('pasteJsonArea').value.trim();
+  if (!raw) { toast('JSONを貼り付けてください'); return; }
+  try {
+    const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
+    if (s === -1 || e === -1) throw new Error('JSONが見つかりません');
+    const data = JSON.parse(raw.slice(s, e + 1));
+    const rec = {
+      id: genId(), img: null, imgType: null,
+      createdAt: new Date().toISOString(),
+      store: data.store || '不明',
+      date: data.date || new Date().toISOString().slice(0,10),
+      accountCode: data.accountCode || '6100',
+      taxType: data.taxType || '10',
+      crAccountCode: data.crAccountCode || '2100',
+      memo: data.memo || data.store || '',
+      items: data.items || [],
+      subtotalExTax: data.subtotalExTax || 0,
+      taxAmount10: data.taxAmount10 || 0,
+      taxAmount8: data.taxAmount8 || 0,
+      total: data.total || 0
+    };
+    receipts.unshift(rec);
+    save(); renderList(); updateHeader(); renderOverview();
+    document.getElementById('pasteJsonModal').classList.add('hide');
+    toast(`✅ ${rec.store} ¥${rec.total.toLocaleString()} を登録しました`);
+  } catch(e) {
+    toast('❌ JSONの形式が正しくありません: ' + e.message);
+  }
+}
+
+function showSaveGuideModal() {
+  document.getElementById('saveGuideModal').classList.remove('hide');
+}
+
+function showManualModal(filename) {
+  document.getElementById('manualFilename').textContent = `📄 ${filename}`;
+  document.getElementById('mi-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('mi-store').value = '';
+  document.getElementById('mi-total').value = '';
+  document.getElementById('mi-memo').value = '';
+  // 勘定科目リスト生成
+  const sel = document.getElementById('mi-acct');
+  if (!sel.options.length) {
+    Object.entries(ACCT).forEach(([c,a]) => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = `${c} ${a.name}`; sel.appendChild(o);
+    });
+    sel.value = '6100'; // デフォルト: 旅費交通費
+  }
+  document.getElementById('manualModal').classList.remove('hide');
+}
+
+function saveManualEntry() {
+  const date  = document.getElementById('mi-date').value;
+  const store = document.getElementById('mi-store').value.trim() || '不明';
+  const total = parseInt(document.getElementById('mi-total').value) || 0;
+  const acct  = document.getElementById('mi-acct').value;
+  const tax   = document.getElementById('mi-tax').value;
+  const memo  = document.getElementById('mi-memo').value.trim();
+  const taxRate = tax === '10' ? 0.1 : tax === '8' ? 0.08 : 0;
+  const taxAmt = Math.round(total * taxRate / (1 + taxRate));
+  const exTax = total - taxAmt;
+  const rec = {
+    id: genId(), createdAt: new Date().toISOString(),
+    img: null, imgType: null,
+    date, store, accountCode: acct, taxType: tax,
+    crAccountCode: '2100', memo: memo || store,
+    items: [{ name: store, qty:1, unitPrice: exTax, price: exTax, accountCode: acct, taxType: tax }],
+    subtotalExTax: exTax,
+    taxAmount10: tax==='10'?taxAmt:0,
+    taxAmount8:  tax==='8' ?taxAmt:0,
+    total
+  };
+  receipts.unshift(rec);
+  save(); renderList(); updateHeader(); renderOverview();
+  document.getElementById('manualModal').classList.add('hide');
+  batchRunning = false;
+  toast(`✅ ${store} ${fmt(total)} を登録しました`);
+}
+
+// ══════════════════════════════
+// データ転送（クリップボード／ファイル）
+// ══════════════════════════════
+
+function showSyncModal() {
+  const el = document.getElementById('exportLog');
+  const il = document.getElementById('importLog');
+  if (el) { el.textContent = 'ボタンを押してJSONファイルを保存してください'; el.className = 'sync-status'; }
+  if (il) { il.textContent = '別デバイスで保存したreceipt-data.jsonを読み込んでください'; il.className = 'sync-status'; }
+  document.getElementById('syncModal').classList.remove('hide');
+}
+
+function updateSyncUI() {
+  const el = document.getElementById('syncStatus');
+  if (el) el.textContent = '☁️ iCloud同期';
+}
+
+function setSyncIndicator(state) {
+  const bnIc = document.getElementById('bn-sync-ic');
+  const icons = { idle:'📲', syncing:'🔄', ok:'✅', err:'⚠️' };
+  if (bnIc) bnIc.textContent = icons[state] || '📲';
+}
+
+// エクスポート：クリップボードにコピー
+async function exportClipboard() {
+  const payload = JSON.stringify({ receipts, exportedAt: new Date().toISOString() });
+  try {
+    await navigator.clipboard.writeText(payload);
+    document.getElementById('exportLog').textContent = `✓ ${receipts.length}件のデータをコピーしました。別デバイスに貼り付けてください。`;
+    document.getElementById('exportLog').className = 'sync-status ok';
+    toast('📋 データをコピーしました');
+  } catch(e) {
+    // clipboard API非対応ブラウザ用フォールバック
+    const ta = document.createElement('textarea');
+    ta.value = payload;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    document.getElementById('exportLog').textContent = `✓ ${receipts.length}件コピー完了`;
+    document.getElementById('exportLog').className = 'sync-status ok';
+  }
+}
+
+// エクスポート：JSONファイル保存（固定ファイル名でiCloud Driveに誘導）
+function exportJsonFile() {
+  const payload = JSON.stringify({ receipts, exportedAt: new Date().toISOString() }, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'receipt-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  const el = document.getElementById('exportLog');
+  if (el) {
+    el.textContent = `✓ ${receipts.length}件を保存しました。iCloud Drive > 書類 に移動してください。`;
+    el.className = 'sync-status ok';
+  }
+  toast('💾 receipt-data.json を保存しました');
+}
+
+// インポート：テキスト貼り付けから取り込み
+function importFromText() {
+  const text = document.getElementById('importArea').value.trim();
+  if (!text) {
+    document.getElementById('importLog').textContent = '⚠️ データを貼り付けてください';
+    document.getElementById('importLog').className = 'sync-status err';
+    return;
+  }
+  mergeImport(text, 'importLog');
+}
+
+// インポート：JSONファイルから取り込み
+function importFromFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => mergeImport(ev.target.result, 'importLog');
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// 共通マージ処理
+function mergeImport(text, logId) {
+  const logEl = document.getElementById(logId);
+  try {
+    const parsed = JSON.parse(text);
+    const incoming = Array.isArray(parsed) ? parsed : parsed.receipts;
+    if (!Array.isArray(incoming)) throw new Error('データ形式が不正です');
+    // idで重複排除してマージ
+    const existingIds = new Set(receipts.map(r => r.id));
+    const newItems = incoming.filter(r => !existingIds.has(r.id));
+    receipts = [...newItems, ...receipts];
+    receipts.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    save();
+    renderList(); updateHeader(); renderOverview();
+    logEl.textContent = `✓ ${newItems.length}件を取り込みました（重複${incoming.length - newItems.length}件スキップ）`;
+    logEl.className = 'sync-status ok';
+    toast(`📥 ${newItems.length}件を取り込みました`);
+  } catch(e) {
+    logEl.textContent = `❌ 取り込み失敗: ${e.message}`;
+    logEl.className = 'sync-status err';
+  }
+}
+
+// モーダル外クリックで閉じる
+document.addEventListener('click', e => {
+  const sm = document.getElementById('syncModal');
+  if (!sm.classList.contains('hide') && e.target === sm) sm.classList.add('hide');
+});
+const APIKEY_STORE = 'corp_apikey';
+
+function getApiKey() {
+  return localStorage.getItem(APIKEY_STORE) || '';
+}
+function saveApiKey() {
+  const val = document.getElementById('apikeyInput').value.trim();
+  if (!val.startsWith('sk-ant-')) {
+    alert('APIキーは sk-ant- で始まる文字列です。確認してください。');
+    return;
+  }
+  localStorage.setItem(APIKEY_STORE, val);
+  updateApiKeyUI();
+  document.getElementById('apikeyModal').classList.add('hide');
+  toast('✓ APIキーを保存しました');
+}
+function deleteApiKey() {
+  if (!confirm('保存済みAPIキーを削除しますか？')) return;
+  localStorage.removeItem(APIKEY_STORE);
+  updateApiKeyUI();
+  toast('APIキーを削除しました');
+}
+function showApiKeyModal() {
+  const key = getApiKey();
+  document.getElementById('apikeyInput').value = key;
+  document.getElementById('apikeyDelete').style.display = key ? 'inline' : 'none';
+  document.getElementById('apikeyModal').classList.remove('hide');
+}
+function updateApiKeyUI() {
+  const key = getApiKey();
+  const el = document.getElementById('apikeyStatus');
+  if (el) el.textContent = key ? 'APIキー設定済み ✓' : 'APIキー未設定';
+  const bnIc = document.getElementById('bn-key-ic');
+  const bnLb = document.getElementById('bn-key-lb');
+  if (bnIc) bnIc.textContent = key ? '✅' : '🔑';
+  if (bnLb) bnLb.textContent = key ? 'API設定済' : 'APIキー';
+}
+// モーダル外クリックで閉じる
+document.addEventListener('click', e => {
+  const modal = document.getElementById('apikeyModal');
+  if (!modal.classList.contains('hide') && e.target === modal) {
+    modal.classList.add('hide');
+  }
+});
+function isMobile() { return window.innerWidth <= 680; }
+
+function toggleSheet() {
+  const panel = document.getElementById('leftPanel');
+  const bd    = document.getElementById('backdrop');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) { closeSheet(); }
+  else {
+    panel.classList.add('open');
+    bd.style.display = 'block';
+    setBnavActive('add');
+  }
+}
+function closeSheet() {
+  document.getElementById('leftPanel').classList.remove('open');
+  document.getElementById('backdrop').style.display = 'none';
+  // 現在のタブに合わせてアクティブを戻す
+  setBnavActive(curTab==='ov'?'ov':curTab==='dt'?'dt':'jr');
+}
+
+function setBnavActive(key) {
+  ['ov','add','dt','jr','ex'].forEach(k => {
+    document.getElementById('bn-'+k)?.classList.toggle('active', k===key);
+  });
+}
+
+function mobileTab(t) {
+  if (isMobile()) closeSheet();
+  setTab(t);
+  setBnavActive(t);
+}
+
+// selectRec後にボトムナビを同期（モバイル）
+// → selectRec本体の末尾でモバイル処理を行う（後述）
+
+// ══════════════════════════════
+// INIT
+// ══════════════════════════════
+renderList(); updateHeader(); renderOverview();
+updateApiKeyUI();
+updateSyncUI();
+// file://で開いている場合は警告
+if (location.protocol === 'file:') {
+  setTimeout(() => {
+    toast('⚠️ ファイルから直接開いています。ClaudeのArtifact（Safariで開く）で使用してください。', true);
+  }, 1000);
+}
+// APIキー未設定なら初回起動時にモーダルを表示
+if (!getApiKey()) showApiKeyModal();
+</script>
+</body>
+</html>
