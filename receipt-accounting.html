@@ -749,7 +749,8 @@ let curTab = 'ov';
 
 // ローカル保存
 function save() {
-  localStorage.setItem('corp_r2', JSON.stringify(receipts));
+  const toSave = receipts.map(r => { const { img, imgType, _imgTemp, ...rest } = r; return rest; });
+  try { localStorage.setItem('corp_r2', JSON.stringify(toSave)); } catch(e) { console.warn('save failed:', e); }
 }
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const fmt = n => '¥' + Math.round(Number(n)||0).toLocaleString('ja-JP');
@@ -826,6 +827,8 @@ async function processFiles(files) {
         const { b64, mime } = await normalizeImage(file);
         const data = await analyzeAI(b64, mime);
         const rec = { id:genId(), img:b64, imgType:mime, createdAt:new Date().toISOString(), ...data };
+        // 画像はメモリのみ・保存時は除外（localStorage節約）
+        rec._imgTemp = true;
         receipts.unshift(rec);
         added++;
         log.firstChild.className = 'blog-item ok';
