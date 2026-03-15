@@ -1447,7 +1447,12 @@ function exportExcel() {
   ws4['!cols']=[{wch:4},{wch:12},{wch:20},{wch:22},{wch:16},{wch:12},{wch:6},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws4, '品目明細');
 
-  XLSX.writeFile(wb, `法人経費_${new Date().toISOString().slice(0,10)}.xlsx`);
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  const xlblob=new Blob([wbout],{type:'application/octet-stream'});
+  const xlurl=URL.createObjectURL(xlblob);
+  const xla=document.createElement('a'); xla.href=xlurl; xla.download=`法人経費_${new Date().toISOString().slice(0,10)}.xlsx`;
+  document.body.appendChild(xla); xla.click();
+  setTimeout(()=>{document.body.removeChild(xla);URL.revokeObjectURL(xlurl);},1000);
   toast('✓ Excelを出力しました（4シート）');
 }
 
@@ -1470,7 +1475,7 @@ function exportJournalCSV() {
   const blob=new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url; a.download=`仕訳帳_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  document.body.appendChild(a); a.click(); setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
   toast('✓ 仕訳帳CSVを出力しました');
 }
 
@@ -1625,8 +1630,7 @@ function exportJsonFile() {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'receipt-data.json';
-  a.click();
-  URL.revokeObjectURL(url);
+  document.body.appendChild(a); a.click(); setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
   const el = document.getElementById('exportLog');
   if (el) {
     el.textContent = `✓ ${receipts.length}件を保存しました。iCloud Drive > 書類 に移動してください。`;
