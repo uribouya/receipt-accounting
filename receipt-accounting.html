@@ -175,7 +175,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 .mbars{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
 .mb-i{display:flex;align-items:center;gap:8px;}
 .mb-l{font-size:10px;color:var(--tx3);width:26px;text-align:right;flex-shrink:0;}
-.mbar-w{flex:1;background:var(--s2);border-radius:4px;height:16px;overflow:hidden;}
+.mbar-w{flex:1;background:var(--s2);border-radius:4px;height:20px;overflow:hidden;}
 .mbar{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));min-width:3px;}
 .mb-v{font-size:10px;color:var(--tx2);font-family:var(--mono);white-space:nowrap;width:70px;flex-shrink:0;}
 .tg4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;}
@@ -933,7 +933,7 @@ async function analyzeAI(b64, mime) {
 利用可能な勘定科目: ${acctList}
 
 返すJSON:
-{"store":"支払先名","date":"YYYY-MM-DD","accountCode":"科目コード","taxType":"10か8か0かno","crAccountCode":"2100","memo":"摘要30字以内","items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"コード","taxType":"10"}],"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"total":0}
+{"store":"支払先名","date":"YYYY-MM-DD","accountCode":"科目コード","taxType":"10か8か0かno","crAccountCode":"1030","memo":"摘要30字以内","items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"コード","taxType":"10"}],"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"total":0}
 
 科目:タクシー電車→6100課税10、接待→6200課税10、社内会議飲食→6210、食料品→6500軽減8、文房具→6310、切手印紙→7300不課税no。金額は整数。`;
 
@@ -1337,7 +1337,7 @@ function renderOverview() {
           ${Object.values(months).map(m=>`
             <div class="mb-i">
               <div class="mb-l">${m.label}</div>
-              <div class="mbar-w"><div class="mbar" style="width:${Math.max(2,Math.round(m.total/maxM*100))}%"></div></div>
+              <div class="mbar-w"><div class="mbar" style="width:${m.total>0?Math.max(6,Math.round(m.total/maxM*100)):0}%"></div></div>
               <div class="mb-v">${m.total>0?fmt(m.total):''}</div>
             </div>`).join('')}
         </div>
@@ -1515,7 +1515,7 @@ function savePastedJson() {
       date: data.date || new Date().toISOString().slice(0,10),
       accountCode: data.accountCode || '6100',
       taxType: data.taxType || '10',
-      crAccountCode: data.crAccountCode || '2100',
+      crAccountCode: data.crAccountCode || '1030',
       memo: data.memo || data.store || '',
       items: data.items || [],
       subtotalExTax: data.subtotalExTax || 0,
@@ -1568,7 +1568,7 @@ function saveManualEntry() {
     id: genId(), createdAt: new Date().toISOString(),
     img: null, imgType: null,
     date, store, accountCode: acct, taxType: tax,
-    crAccountCode: '2100', memo: memo || store,
+    crAccountCode: '1030', memo: memo || store,
     items: [{ name: store, qty:1, unitPrice: exTax, price: exTax, accountCode: acct, taxType: tax }],
     subtotalExTax: exTax,
     taxAmount10: tax==='10'?taxAmt:0,
