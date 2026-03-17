@@ -45,7 +45,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--tx);
 
 /* LEFT */
 .left{background:var(--surface);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;}
-.uparea{margin:14px;border:2px dashed var(--bd2);border-radius:10px;padding:18px 12px;text-align:center;cursor:pointer;background:var(--s2);transition:all .2s;}
+.uparea{margin:8px 14px 4px;border:2px dashed var(--bd2);border-radius:10px;padding:10px 12px;text-align:center;cursor:pointer;background:var(--s2);transition:all .2s;}
 .uparea:hover,.uparea.drag{border-color:var(--accent2);background:var(--blu2);}
 .up-ic{font-size:26px;margin-bottom:6px;}
 .up-t{font-size:13px;font-weight:700;color:var(--accent);}
@@ -65,7 +65,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--tx);
 .blog-item.ok{background:var(--grn2);color:var(--grn);}
 .blog-item.err{background:#fef2f2;color:var(--red);}
 .blog-item.ing{background:var(--blu2);color:var(--blu);}
-.upbtns{display:flex;gap:8px;margin:0 14px 14px;}
+.upbtns{display:flex;gap:8px;margin:0 14px 8px;}
 .sb{flex:1;padding:8px;border-radius:7px;border:none;cursor:pointer;font-size:11px;font-weight:700;font-family:'Noto Sans JP',sans-serif;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;}
 .sb-p{background:var(--accent);color:#fff;}
 .sb-p:hover{background:var(--accent2);}
@@ -84,11 +84,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--tx);
 .rc:hover{border-color:var(--accent2);background:var(--blu2);}
 .rc.active{border-color:var(--accent);background:var(--blu2);box-shadow:inset 3px 0 0 var(--accent);}
 .rc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
-.rc-store{font-size:13px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rc-store{font-size:14px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rc-total{font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent);white-space:nowrap;}
 .rc-mid{display:flex;justify-content:space-between;margin-top:3px;}
 .rc-acct{font-size:10px;color:var(--tx2);}
-.rc-date{font-size:10px;color:var(--tx3);font-family:var(--mono);}
+.rc-date{font-size:11px;color:var(--tx3);font-family:var(--mono);}
 .rc-bot{display:flex;gap:4px;margin-top:6px;align-items:center;flex-wrap:wrap;}
 .chip{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;}
 .c-exp{background:#fef3c7;color:#92400e;}
@@ -643,15 +643,14 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <div class="left-drag"></div>
     <button class="sheet-close" onclick="closeSheet()">✕ 閉じる</button>
     <div class="uparea" id="dz" ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" onclick="document.getElementById('fi').click()">
-      <div class="up-ic">🧾</div>
-      <div class="up-t">レシートを読み込む</div>
+      <div class="up-t" style="font-size:13px;font-weight:600">🧾 レシートを読み込む</div>
       <div class="up-s">複数枚同時選択OK・ドラッグ＆ドロップ対応</div>
     </div>
     <div class="upbtns">
       <button class="sb sb-p" onclick="document.getElementById('fi').click()">🖼️ 画像選択（複数可）</button>
       <button class="sb sb-s" onclick="document.getElementById('ci').click()">📸 カメラ</button>
     </div>
-    <button class="sb" onclick="showPasteJsonModal()" style="width:100%;margin-top:8px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #81c784;border-radius:10px;padding:10px;font-size:13px;cursor:pointer;">📋 ClaudeのJSONを貼り付けて登録</button>
+
     <input type="file" id="fi" accept="image/*" multiple onchange="onFile(event)">
     <input type="file" id="ci" accept="image/*" capture="environment" onchange="onFile(event)">
     <!-- バッチ進捗 -->
