@@ -662,9 +662,16 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
       <div class="batch-bar-bg"><div class="batch-bar" id="batchBar" style="width:0%"></div></div>
       <div class="batch-log" id="batchLog"></div>
     </div>
-    <div class="lh">
+    <div class="lh" style="flex-wrap:wrap;gap:4px">
       <div class="lh-t">経費一覧</div>
       <div class="badge" id="lc">0</div>
+      <span id="errBadge" style="display:none;background:#ef4444;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;cursor:pointer;" onclick="toggleErrFilter()">⚠️ 日付エラー <span id="errCnt">0</span></span>
+    </div>
+    <div style="display:flex;gap:4px;padding:4px 8px 6px;flex-wrap:wrap;">
+      <button id="sortBtn0" onclick="setSort('date-desc')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--bd);background:var(--accent);color:#fff;cursor:pointer;">日付↓</button>
+      <button id="sortBtn1" onclick="setSort('date-asc')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--bd);background:var(--s2);cursor:pointer;">日付↑</button>
+      <button id="sortBtn2" onclick="setSort('amt-desc')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--bd);background:var(--s2);cursor:pointer;">金額↓</button>
+      <button id="sortBtn3" onclick="setSort('created')" style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid var(--bd);background:var(--s2);cursor:pointer;">登録順</button>
     </div>
     <div class="rlist" id="rlist">
       <div class="empty"><div class="empty-i">📂</div><div>レシートを追加してください</div></div>
@@ -777,6 +784,8 @@ const TAX_CHIP = { '10':'c-t10', '8':'c-t8', '0':'c-t0', 'no':'c-tno' };
 // ══════════════════════════════
 let receipts = JSON.parse(localStorage.getItem('corp_r2') || '[]');
 let trash = JSON.parse(localStorage.getItem('corp_trash') || '[]'); // 削除済みバッファ（最大30件）
+let sortMode = 'date-desc'; // date-desc, date-asc, amt-desc, created
+let errFilterOn = false; // 日付エラーフィルター
 let curId = null;
 let curTab = 'ov';
 
@@ -967,7 +976,7 @@ async function analyzeAI(b64, mime) {
 返すJSON:
 {"store":"支払先名","date":"YYYY-MM-DD","accountCode":"科目コード","taxType":"10か8か0かno","crAccountCode":"1030","memo":"摘要30字以内","items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"コード","taxType":"10"}],"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"total":0}
 
-科目:タクシー電車→6100課税10、接待→6200課税10、社内会議飲食→6210、食料品→6500軽減8、文房具→6310、切手印紙→7300不課税no。金額は整数。`;
+科目:タクシー電車バス→6100課税10、ガソリン燃料→6100課税10（水道光熱費ではない）、接待→6200課税10、社内会議飲食→6210、食料品→6500軽減8、文房具コピー用紙→6310、プリント印刷代→6310課税10（租税公課ではない）、切手収入印紙→7300不課税no、駐車場→6100課税10。金額は整数。`;
 
   const apiKey = getApiKey();
   // Artifact環境の判定:
@@ -1053,21 +1062,70 @@ async function analyzeAI(b64, mime) {
 // ══════════════════════════════
 // LIST
 // ══════════════════════════════
+function isDateError(date) {
+  if (!date) return true;
+  const d = new Date(date);
+  if (isNaN(d)) return true;
+  const y = d.getFullYear(), m = d.getMonth()+1;
+  // 令和7年度: 2025年4月〜2026年3月
+  return !((y===2025 && m>=4) || (y===2026 && m<=3));
+}
+
+function setSort(mode) {
+  sortMode = mode;
+  errFilterOn = false;
+  ['sortBtn0','sortBtn1','sortBtn2','sortBtn3'].forEach((id,i) => {
+    const modes = ['date-desc','date-asc','amt-desc','created'];
+    document.getElementById(id).style.background = modes[i]===mode ? 'var(--accent)' : 'var(--s2)';
+    document.getElementById(id).style.color = modes[i]===mode ? '#fff' : 'var(--tx)';
+  });
+  renderList();
+}
+
+function toggleErrFilter() {
+  errFilterOn = !errFilterOn;
+  document.getElementById('errBadge').style.background = errFilterOn ? '#b91c1c' : '#ef4444';
+  renderList();
+}
+
 function renderList() {
   const el = document.getElementById('rlist');
   document.getElementById('lc').textContent = receipts.length;
+
+  // エラー件数バッジ
+  const errList = receipts.filter(r => isDateError(r.date));
+  const errBadge = document.getElementById('errBadge');
+  const errCnt = document.getElementById('errCnt');
+  if (errList.length > 0) {
+    errBadge.style.display = 'inline-block';
+    errCnt.textContent = errList.length;
+  } else {
+    errBadge.style.display = 'none';
+  }
+
   if (!receipts.length) { el.innerHTML='<div class="empty"><div class="empty-i">📂</div><div>レシートを追加してください</div></div>'; return; }
-  el.innerHTML = receipts.map(r => {
+
+  // フィルター
+  let list = errFilterOn ? errList : [...receipts];
+
+  // ソート
+  if (sortMode === 'date-desc') list.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  else if (sortMode === 'date-asc') list.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  else if (sortMode === 'amt-desc') list.sort((a,b) => (b.total||0)-(a.total||0));
+  else list.sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+
+  el.innerHTML = list.map(r => {
     const a = ACCT[r.accountCode];
     const tt = r.taxType||'10';
-    return `<div class="rc ${curId===r.id?'active':''}" onclick="selectRec('${r.id}')">
+    const isErr = isDateError(r.date);
+    return `<div class="rc ${curId===r.id?'active':''}" onclick="selectRec('${r.id}')" style="${isErr?'border-color:#ef4444;':''}">
       <div class="rc-top">
-        <div class="rc-store">${esc(r.store||'不明')}</div>
+        <div class="rc-store">${isErr?'⚠️ ':''}${esc(r.store||'不明')}</div>
         <div class="rc-total">${fmt(r.total)}</div>
       </div>
       <div class="rc-mid">
         <div class="rc-acct">${a?a.name:'—'}</div>
-        <div class="rc-date">${r.date||''}</div>
+        <div class="rc-date" style="${isErr?'color:#ef4444;font-weight:700;':''}">${r.date||'日付なし'}</div>
       </div>
       <div class="rc-bot">
         ${a?`<span class="chip ${a.type==='asset'?'c-ast':'c-exp'}">${r.accountCode} ${a.name}</span>`:''}
