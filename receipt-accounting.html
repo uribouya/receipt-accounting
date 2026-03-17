@@ -172,11 +172,12 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 .abar-w{flex:1;background:var(--s2);border-radius:3px;height:6px;overflow:hidden;}
 .abar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent2),var(--accent));}
 .aamt{font-family:var(--mono);font-size:11px;color:var(--tx2);min-width:86px;text-align:right;}
-.mbars{display:flex;gap:10px;align-items:flex-end;height:96px;margin-top:12px;}
-.mb-i{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
-.mbar{width:100%;border-radius:4px 4px 0 0;min-height:3px;background:linear-gradient(180deg,var(--accent2),var(--accent));}
-.mb-l{font-size:9px;color:var(--tx3);}
-.mb-v{font-size:9px;color:var(--tx2);font-family:var(--mono);}
+.mbars{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+.mb-i{display:flex;align-items:center;gap:8px;}
+.mb-l{font-size:10px;color:var(--tx3);width:26px;text-align:right;flex-shrink:0;}
+.mbar-w{flex:1;background:var(--s2);border-radius:4px;height:16px;overflow:hidden;}
+.mbar{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));min-width:3px;}
+.mb-v{font-size:10px;color:var(--tx2);font-family:var(--mono);white-space:nowrap;width:70px;flex-shrink:0;}
 .tg4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;}
 .tc{background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:12px;}
 .tr-rate{font-size:18px;font-weight:900;font-family:var(--mono);}
@@ -1289,14 +1290,17 @@ function renderOverview() {
   receipts.forEach(r=>{ const c=r.accountCode||'0000'; aMap[c]=(aMap[c]||0)+(r.total||0); });
   const maxA = Math.max(...Object.values(aMap),1);
 
-  // 月別（6か月）
+  // 月別（4月始まり12ヶ月）
   const months={};
-  for(let i=5;i>=0;i--){
-    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
-    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    months[key]={label:`${d.getMonth()+1}月`,total:0};
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth()+1;
+  const fiscalStartYear = curMonth >= 4 ? curYear : curYear - 1;
+  for(let i=0;i<12;i++){
+    const m = ((3 + i) % 12) + 1;
+    const y = m >= 4 ? fiscalStartYear : fiscalStartYear + 1;
+    const key=`${y}-${String(m).padStart(2,'0')}`;
+    months[key]={label:`${m}月`,total:0};
   }
-  receipts.forEach(r=>{ if(r.date&&months[r.date.slice(0,7)])months[r.date.slice(0,7)].total+=(r.total||0); });
   const maxM=Math.max(...Object.values(months).map(m=>m.total),1);
 
   // 税区分別
@@ -1332,9 +1336,9 @@ function renderOverview() {
         <div class="mbars">
           ${Object.values(months).map(m=>`
             <div class="mb-i">
-              <div class="mb-v">${m.total>0?fmt(m.total):''}</div>
-              <div class="mbar" style="height:${Math.max(3,Math.round(m.total/maxM*88))}px"></div>
               <div class="mb-l">${m.label}</div>
+              <div class="mbar-w"><div class="mbar" style="width:${Math.max(2,Math.round(m.total/maxM*100))}%"></div></div>
+              <div class="mb-v">${m.total>0?fmt(m.total):''}</div>
             </div>`).join('')}
         </div>
       </div>
@@ -1447,12 +1451,12 @@ function exportExcel() {
   ws4['!cols']=[{wch:4},{wch:12},{wch:20},{wch:22},{wch:16},{wch:12},{wch:6},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws4, '品目明細');
 
-  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  const xlblob=new Blob([wbout],{type:'application/octet-stream'});
-  const xlurl=URL.createObjectURL(xlblob);
-  const xla=document.createElement('a'); xla.href=xlurl; xla.download=`法人経費_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  const xla=document.createElement('a');
+  xla.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  xla.download=`法人経費_${new Date().toISOString().slice(0,10)}.xlsx`;
   document.body.appendChild(xla); xla.click();
-  setTimeout(()=>{document.body.removeChild(xla);URL.revokeObjectURL(xlurl);},1000);
+  setTimeout(()=>{document.body.removeChild(xla);},1000);
   toast('✓ Excelを出力しました（4シート）');
 }
 
