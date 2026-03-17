@@ -498,6 +498,18 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
       ⚠️ 取り込み時は重複レシートを自動スキップします
     </div>
 
+    <div style="border-top:1px solid var(--bd);margin-top:16px;padding-top:16px;">
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:8px;font-weight:600;">🔧 一括データ修正</div>
+      <select id="bulkCrSelect" class="fi" style="width:100%;margin-bottom:8px;">
+        <option value="1000">1000 現金</option>
+        <option value="1030" selected>1030 小口現金</option>
+        <option value="2100">2100 未払金（法人カード）</option>
+        <option value="2110">2110 未払金（個人立替）</option>
+      </select>
+      <button class="sync-btn sync-btn-p" style="width:100%;padding:10px;font-size:13px;" onclick="bulkChangeCr()">
+        💳 全データの支払方法を一括変更
+      </button>
+    </div>
     <button class="sync-btn sync-btn-s" style="width:100%;margin-top:12px;" onclick="document.getElementById('syncModal').classList.add('hide')">閉じる</button>
   </div>
 </div>
@@ -1586,6 +1598,16 @@ function saveManualEntry() {
 // ══════════════════════════════
 // データ転送（クリップボード／ファイル）
 // ══════════════════════════════
+
+function bulkChangeCr() {
+  const code = document.getElementById('bulkCrSelect').value;
+  const names = {'1000':'現金','1030':'小口現金','2100':'未払金（法人カード）','2110':'未払金（個人立替）'};
+  if (!confirm(`全${receipts.length}件の支払方法を「${names[code]}」に変更しますか？`)) return;
+  receipts.forEach(r => { r.crAccountCode = code; });
+  save(); renderList(); updateHeader(); renderOverview();
+  toast(`✓ ${receipts.length}件を「${names[code]}」に一括変更しました`);
+  document.getElementById('syncModal').classList.add('hide');
+}
 
 function showSyncModal() {
   const el = document.getElementById('exportLog');
