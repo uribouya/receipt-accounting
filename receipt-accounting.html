@@ -458,8 +458,10 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   </div>
   <div class="hact">
     <button class="hb hb-o" onclick="exportJournalCSV()">📋 仕訳帳CSV</button>
+    <button class="hb" style="background:#7c3aed;color:#fff;border:none;" onclick="exportYayoiCSV()">🏦 弥生CSV</button>
     <button class="hb hb-g" onclick="exportExcel()">📊 Excel出力</button>
     <button class="hb-key" onclick="showSyncModal()" id="syncBtn">☁️ <span id="syncStatus">同期未設定</span></button>
+    <button class="hb-key" onclick="showBankModal()" style="background:#0ea5e9;color:#fff;border:none;">🏦 通帳管理</button>
     <button class="hb-key" onclick="showApiKeyModal()" id="apikeyBtn">🔑 <span id="apikeyStatus">APIキー未設定</span></button>
   </div>
 </div>
@@ -519,6 +521,29 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     </div>
     <button class="sync-btn sync-btn-s" style="width:100%;margin-top:8px;" onclick="showTrashModal();document.getElementById('syncModal').classList.add('hide')">🗑 ゴミ箱・削除データの復元</button>
     <button class="sync-btn sync-btn-s" style="width:100%;margin-top:8px;" onclick="document.getElementById('syncModal').classList.add('hide')">閉じる</button>
+  </div>
+</div>
+
+<!-- 通帳モーダル -->
+<div class="sync-modal hide" id="bankModal">
+  <div class="sync-inner" style="max-width:520px">
+    <div class="sync-title">🏦 通帳・口座明細管理</div>
+    <div class="sync-sub">通帳のPDFや画像をアップロードしてAIで自動解析します。解析結果は弥生CSV出力に含まれます。</div>
+
+    <div style="border:2px dashed var(--bd2);border-radius:10px;padding:16px;text-align:center;background:var(--s2);margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">📄 通帳PDF・画像をアップロード</div>
+      <input type="file" id="bankFile" accept="application/pdf,image/*" style="display:none" onchange="analyzeBankPDF(this.files[0])">
+      <button onclick="document.getElementById('bankFile').click()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;cursor:pointer">📁 ファイルを選択</button>
+      <div id="bankAnalyzeStatus" style="margin-top:8px;font-size:12px;color:var(--tx3)">PDFまたは画像（JPG/PNG）を選択してください</div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:600">取込済みデータ（<span id="bankCnt">0</span>件）</div>
+      <button onclick="exportYayoiCSV()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">🏦 弥生CSV出力</button>
+    </div>
+    <div id="bankList" style="max-height:300px;overflow-y:auto;margin-bottom:12px"></div>
+
+    <button class="sync-btn sync-btn-s" style="width:100%;padding:10px" onclick="document.getElementById('bankModal').classList.add('hide')">閉じる</button>
   </div>
 </div>
 
@@ -1617,6 +1642,185 @@ function exportJournalCSV() {
   const a=document.createElement('a'); a.href=url; a.download=`仕訳帳_${new Date().toISOString().slice(0,10)}.csv`;
   document.body.appendChild(a); a.click(); setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
   toast('✓ 仕訳帳CSVを出力しました');
+}
+
+// ══════════════════════════════
+// 弥生会計CSV出力
+// ══════════════════════════════
+function exportYayoiCSV() {
+  // レシートデータ＋通帳データを合わせて出力
+  const allData = [
+    ...receipts,
+    ...(bankEntries||[])
+  ];
+  if (!allData.length) { toast('データがありません', true); return; }
+
+  // 弥生税区分マッピング
+  const yayoiTax = {
+    '10': '課税仕入10%',
+    '8':  '軽減税率8%',
+    '0':  '非課税',
+    'no': '対象外'
+  };
+
+  const rows = [];
+  allData.forEach(r => {
+    const { drRows, crRows } = buildEntries(r);
+    const len = Math.max(drRows.length, crRows.length);
+    for (let i=0; i<len; i++) {
+      const dr = drRows[i]||{dr:'',drC:'',amt:0};
+      const cr = crRows[i]||{cr:'',crC:'',amt:0};
+      const taxStr = i===0 ? (yayoiTax[r.taxType]||'対象外') : '対象外';
+      const memo = i===0 ? (r.memo||r.store||'') : '';
+      // 弥生形式: 識別フラグ,伝票No,決算,取引日付,借方科目,借方補助,借方部門,借方税区分,借方金額,借方税金額,貸方科目,貸方補助,貸方部門,貸方税区分,貸方金額,貸方税金額,摘要,番号,期日,タイプ,生成元,仕訳メモ,付箋1,付箋2,調整
+      rows.push([
+        2000,           // 識別フラグ（仕訳）
+        '',             // 伝票No
+        '',             // 決算
+        r.date||'',     // 取引日付
+        dr.dr||'',      // 借方勘定科目
+        '',             // 借方補助科目
+        '',             // 借方部門
+        i===0 ? taxStr : '対象外', // 借方税区分
+        dr.amt||0,      // 借方金額
+        '',             // 借方税金額
+        cr.cr||'',      // 貸方勘定科目
+        '',             // 貸方補助科目
+        '',             // 貸方部門
+        '対象外',       // 貸方税区分
+        cr.amt||0,      // 貸方金額
+        '',             // 貸方税金額
+        memo,           // 摘要
+        '',             // 番号
+        '',             // 期日
+        0,              // タイプ（0=仕訳）
+        '',             // 生成元
+        '',             // 仕訳メモ
+        '',             // 付箋1
+        '',             // 付箋2
+        'no'            // 調整
+      ].map(v => typeof v==='string' && v.includes(',') ? `"${v}"` : v).join(','));
+    }
+  });
+
+  const csv = rows.join('
+');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `弥生仕訳_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  toast(`✓ 弥生会計CSV出力（${allData.length}件）`);
+}
+
+// ══════════════════════════════
+// 通帳管理
+// ══════════════════════════════
+let bankEntries = JSON.parse(localStorage.getItem('corp_bank') || '[]');
+
+function saveBankEntries() {
+  const toSave = bankEntries.map(({img,imgType,...rest})=>rest);
+  try { localStorage.setItem('corp_bank', JSON.stringify(toSave)); } catch(e) {}
+}
+
+function showBankModal() {
+  renderBankModal();
+  document.getElementById('bankModal').classList.remove('hide');
+}
+
+function renderBankModal() {
+  const el = document.getElementById('bankList');
+  const cnt = document.getElementById('bankCnt');
+  if (cnt) cnt.textContent = bankEntries.length;
+  if (!bankEntries.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--tx3)">通帳データがありません<br><small>PDFをアップロードしてAI解析してください</small></div>';
+    return;
+  }
+  el.innerHTML = bankEntries.map((r,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:12px">
+      <div style="flex:1">
+        <div style="font-weight:600">${r.store||r.memo||'不明'}</div>
+        <div style="color:var(--tx3)">${r.date||''} ／ ${r.total>=0?'入金':'出金'} ¥${Math.abs(r.total||0).toLocaleString()}</div>
+        <div style="color:var(--tx2)">${r.accountCode||''} ${(ACCT[r.accountCode]||{}).name||''}</div>
+      </div>
+      <button onclick="deleteBankEntry(${i})" style="background:#ef4444;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">削除</button>
+    </div>`).join('');
+}
+
+function deleteBankEntry(i) {
+  bankEntries.splice(i, 1);
+  saveBankEntries();
+  renderBankModal();
+  toast('削除しました');
+}
+
+async function analyzeBankPDF(file) {
+  const apiKey = getApiKey();
+  if (!apiKey) { toast('APIキーを設定してください', true); return; }
+
+  const statusEl = document.getElementById('bankAnalyzeStatus');
+  statusEl.textContent = '🔄 AI解析中...';
+  statusEl.style.color = 'var(--accent)';
+
+  try {
+    const b64 = await new Promise((res,rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+
+    const isPdf = file.type === 'application/pdf';
+    const prompt = `この通帳・明細書の画像を解析して、全取引をJSON配列で返してください。
+各取引は以下の形式：
+{"date":"YYYY-MM-DD","memo":"摘要","total":金額（出金はマイナス、入金はプラス）,"accountCode":"科目コード","taxType":"no"}
+科目コード: 売上金入金→4000、給与支払→6700、家賃→7000、水道光熱→6800、通信費→6500、税金→7300、借入返済→2500、その他出金→6999
+JSON配列のみ返答。説明不要。`;
+
+    const msgContent = isPdf
+      ? [{ type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:prompt}]
+      : [{ type:'image', source:{type:'base64', media_type:file.type, data:b64}}, {type:'text', text:prompt}];
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true',
+        'anthropic-beta':'pdfs-2024-09-25'
+      },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:2000,
+        messages:[{role:'user', content:msgContent}]
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message||'API Error');
+    let raw = data.content?.[0]?.text||'';
+    raw = raw.replace(/```[\w]*
+?/g,'').replace(/
+?```/g,'').trim();
+    const start = raw.indexOf('['), end = raw.lastIndexOf(']');
+    if (start===-1||end===-1) throw new Error('JSON配列が見つかりません');
+    const entries = JSON.parse(raw.slice(start, end+1));
+
+    entries.forEach(e => {
+      bankEntries.unshift({ id:genId(), ...e, crAccountCode: e.total>=0 ? '1110' : '1030', createdAt:new Date().toISOString() });
+    });
+    saveBankEntries();
+    renderBankModal();
+    statusEl.textContent = `✅ ${entries.length}件を取込みました`;
+    statusEl.style.color = 'var(--grn)';
+    toast(`✓ 通帳データ ${entries.length}件を追加`);
+  } catch(e) {
+    statusEl.textContent = `❌ エラー: ${e.message}`;
+    statusEl.style.color = 'var(--red)';
+  }
 }
 
 // ══════════════════════════════
