@@ -1703,8 +1703,7 @@ function exportYayoiCSV() {
     }
   });
 
-  const csv = rows.join('
-');
+  const csv = rows.join('\r\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1802,9 +1801,7 @@ JSON配列のみ返答。説明不要。`;
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error?.message||'API Error');
     let raw = data.content?.[0]?.text||'';
-    raw = raw.replace(/```[\w]*
-?/g,'').replace(/
-?```/g,'').trim();
+    raw = raw.replace(/```[\w]*/g,'').replace(/```/g,'').trim();
     const start = raw.indexOf('['), end = raw.lastIndexOf(']');
     if (start===-1||end===-1) throw new Error('JSON配列が見つかりません');
     const entries = JSON.parse(raw.slice(start, end+1));
