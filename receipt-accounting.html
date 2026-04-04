@@ -991,17 +991,21 @@ async function analyzeAI(b64, mime) {
     .map(([c,a]) => `${c}:${a.name}`)
     .join(', ');
 
-  const prompt = `あなたは日本の法人会計・経費精算の専門家です。
-このレシート画像を解析し、JSONのみで回答してください。
-説明文・マークダウン・コードブロックは不要です。
-最初の文字を{、最後の文字を}にしてください。
+  const prompt = `レシート画像を解析してJSONのみ返してください。余計な文字・マークダウン不要。
 
-利用可能な勘定科目: ${acctList}
+返すJSON（項目を必ず全て含める）:
+{"store":"支払先名","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","crAccountCode":"1030","memo":"摘要","total":0,"items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]}
 
-返すJSON:
-{"store":"支払先名","date":"YYYY-MM-DD","accountCode":"科目コード","taxType":"10か8か0かno","crAccountCode":"1030","memo":"摘要30字以内","items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"コード","taxType":"10"}],"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"total":0}
+勘定科目ルール:
+- タクシー・電車・バス・駐車場・ガソリン・燃料 → 6100（旅費交通費）※ガソリンは水道光熱費6800ではない
+- 接待・会食（社外） → 6200
+- 社内会議・社内飲食 → 6210
+- 食料品・飲料（軽減税率） → 6500、taxType:"8"
+- 文房具・コピー用紙・プリント・印刷 → 6310（事務用品費）※租税公課7300ではない
+- 切手・収入印紙 → 7300、taxType:"no"
 
-科目:タクシー電車バス→6100課税10、ガソリン燃料→6100課税10（水道光熱費ではない）、接待→6200課税10、社内会議飲食→6210、食料品→6500軽減8、文房具コピー用紙→6310、プリント印刷代→6310課税10（租税公課ではない）、切手収入印紙→7300不課税no、駐車場→6100課税10。金額は整数。`;
+taxTypeは課税10%→"10"、軽減8%→"8"、非課税→"0"、不課税→"no"
+totalは税込合計金額（整数）。`;
 
   const apiKey = getApiKey();
   // Artifact環境の判定:
@@ -1071,10 +1075,16 @@ async function analyzeAI(b64, mime) {
       try { d = JSON.parse(rawText); } catch(pe) { lastErr = `${model} パース失敗: ${rawText.slice(0,300)}`; continue; }
       if (!d.content?.[0]?.text) { lastErr = `${model} 応答空: ${d.stop_reason}`; continue; }
       let raw = d.content[0].text.trim();
-      raw = raw.replace(/^```[\w]*\n?/i,'').replace(/\n?```$/i,'').trim();
+      raw = raw.replace(/```[\w]*/g,'').replace(/```/g,'').trim();
       const start2 = raw.indexOf('{'), end2 = raw.lastIndexOf('}');
       if (start2===-1||end2===-1) { lastErr=`${model} JSON無し`; continue; }
-      return JSON.parse(raw.slice(start2, end2+1));
+      const parsed = JSON.parse(raw.slice(start2, end2+1));
+      // totalが0またはない場合はitemsから合算
+      if (!parsed.total && parsed.items && parsed.items.length > 0) {
+        parsed.total = parsed.items.reduce((s,i) => s + (i.price||0), 0);
+      }
+      // subtotalExTax/taxAmountはcalcTaxで再計算するので不要
+      return parsed;
     } catch(e) {
       if (e.message && e.message.includes('APIキーが無効')) throw e;
       if (e.name === 'AbortError') { lastErr = `${model} タイムアウト(30秒)`; continue; }
@@ -1337,9 +1347,8 @@ function renderDetail() {
           </tr>`).join('')}
         </tbody>
         <tfoot>
-          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">税抜小計</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.subtotalExTax)}</td><td></td></tr>
-          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">消費税（10%）</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.taxAmount10)}</td><td></td></tr>
-          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">消費税（8%）</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(r.taxAmount8)}</td><td></td></tr>
+          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">税抜小計</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(calcTax(r).exTax)}</td><td></td></tr>
+          <tr class="sub-row"><td colspan="5" style="text-align:right;padding:7px 11px">消費税（${r.taxType==='8'?'8':'10'}%）</td><td style="text-align:right;font-family:var(--mono);padding:7px 11px">${fmtN(calcTax(r).tax)}</td><td></td></tr>
           <tr class="total-row"><td colspan="5" style="text-align:right;padding:9px 11px">合計（税込）</td><td style="text-align:right;font-family:var(--mono);font-size:15px;color:var(--grn);padding:9px 11px">${fmt(r.total)}</td><td></td></tr>
         </tfoot>
       </table>
@@ -1363,16 +1372,30 @@ function remItem(id, i) { const r=receipts.find(r=>r.id===id); if(r?.items){r.it
 // ══════════════════════════════
 // JOURNAL（仕訳帳）
 // ══════════════════════════════
+function calcTax(r) {
+  const total = r.total||0;
+  const tt = r.taxType||'10';
+  let tax = 0, exTax = 0;
+  if (tt === '10') {
+    tax = Math.round(total / 1.1 * 0.1);
+    exTax = total - tax;
+  } else if (tt === '8') {
+    tax = Math.round(total / 1.08 * 0.08);
+    exTax = total - tax;
+  } else {
+    tax = 0;
+    exTax = total;
+  }
+  return { tax, exTax };
+}
+
 function buildEntries(r) {
   const a = ACCT[r.accountCode];
   const cr = CR_ACCT.find(x=>x.code===r.crAccountCode)||CR_ACCT[0];
   const total = r.total||0;
-  const exTax = r.subtotalExTax||total;
-  const tx10 = r.taxAmount10||0;
-  const tx8  = r.taxAmount8||0;
-  const taxTotal = tx10 + tx8;
+  const { tax, exTax } = calcTax(r);
   const drRows = [{ dr:a?.name||'諸口', drC:r.accountCode||'', amt:exTax }];
-  if (taxTotal>0) drRows.push({ dr:'仮払消費税等', drC:'1180', amt:taxTotal });
+  if (tax > 0) drRows.push({ dr:'仮払消費税等', drC:'1180', amt:tax });
   const crRows = [{ cr:cr.name, crC:cr.code, amt:total }];
   return { drRows, crRows };
 }
@@ -1438,7 +1461,7 @@ function renderOverview() {
     return;
   }
   const total = receipts.reduce((s,r)=>s+(r.total||0),0);
-  const tax   = receipts.reduce((s,r)=>s+(r.taxAmount10||0)+(r.taxAmount8||0),0);
+  const tax   = receipts.reduce((s,r)=>s+calcTax(r).tax,0);
   const now   = new Date();
   const mk    = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const mRecs = receipts.filter(r=>r.date?.startsWith(mk));
@@ -1524,7 +1547,7 @@ function renderOverview() {
 // ══════════════════════════════
 function updateHeader() {
   const total=receipts.reduce((s,r)=>s+(r.total||0),0);
-  const tax=receipts.reduce((s,r)=>s+(r.taxAmount10||0)+(r.taxAmount8||0),0);
+  const tax=receipts.reduce((s,r)=>s+calcTax(r).tax,0);
   document.getElementById('hC').textContent=receipts.length;
   document.getElementById('hT').textContent=fmt(total);
   document.getElementById('hTx').textContent=fmt(tax);
