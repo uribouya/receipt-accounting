@@ -518,6 +518,9 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
       <button class="sync-btn sync-btn-p" style="width:100%;padding:10px;font-size:13px;" onclick="bulkChangeCr()">
         💳 全データの支払方法を一括変更
       </button>
+      <button class="sync-btn sync-btn-p" style="width:100%;padding:10px;font-size:13px;margin-top:8px;background:#7c3aed;" onclick="bulkRemapAcct()">
+        📒 科目を新ルール（議事録3/21）に一括変換
+      </button>
     </div>
     <button class="sync-btn sync-btn-s" style="width:100%;margin-top:8px;" onclick="showTrashModal();document.getElementById('syncModal').classList.add('hide')">🗑 ゴミ箱・削除データの復元</button>
     <button class="sync-btn sync-btn-s" style="width:100%;margin-top:8px;" onclick="document.getElementById('syncModal').classList.add('hide')">閉じる</button>
@@ -764,32 +767,40 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 // 勘定科目マスタ（法人・販管費中心）
 // ══════════════════════════════
 const ACCT = {
-  '5110':{ name:'仕入高',        type:'cost',    tax:'10' },
-  '5120':{ name:'外注費',        type:'cost',    tax:'10' },
-  '6100':{ name:'旅費交通費',    type:'expense', tax:'10' },
-  '6110':{ name:'出張旅費',      type:'expense', tax:'10' },
-  '6200':{ name:'交際費',        type:'expense', tax:'10' },
-  '6210':{ name:'会議費',        type:'expense', tax:'10' },
-  '6220':{ name:'接待飲食費',    type:'expense', tax:'10' },
-  '6300':{ name:'消耗品費',      type:'expense', tax:'10' },
-  '6310':{ name:'事務用品費',    type:'expense', tax:'10' },
-  '6320':{ name:'荷造運賃',      type:'expense', tax:'10' },
-  '6400':{ name:'通信費',        type:'expense', tax:'10' },
-  '6410':{ name:'郵便費',        type:'expense', tax:'10' },
-  '6500':{ name:'福利厚生費',    type:'expense', tax:'10' },
-  '6510':{ name:'食事代（社内）', type:'expense', tax:'8'  },
-  '6600':{ name:'広告宣伝費',    type:'expense', tax:'10' },
-  '6700':{ name:'地代家賃',      type:'expense', tax:'10' },
-  '6800':{ name:'水道光熱費',    type:'expense', tax:'10' },
-  '6900':{ name:'修繕費',        type:'expense', tax:'10' },
-  '7000':{ name:'雑費',          type:'expense', tax:'10' },
-  '7100':{ name:'新聞図書費',    type:'expense', tax:'10' },
-  '7200':{ name:'保険料',        type:'expense', tax:'0'  },
-  '7300':{ name:'租税公課',      type:'expense', tax:'no' },
-  '7400':{ name:'減価償却費',    type:'expense', tax:'no' },
-  '1500':{ name:'仮払金',        type:'asset',   tax:'no' },
-  '1510':{ name:'立替金',        type:'asset',   tax:'no' },
-  '1520':{ name:'前払費用',      type:'asset',   tax:'no' },
+  // 売上原価
+  '5110':{ name:'仕入高',           type:'cost',    tax:'10' },
+  '5120':{ name:'外注費',           type:'cost',    tax:'10' },
+  // 旅費・交通
+  '6100':{ name:'旅費交通費',       type:'expense', tax:'10' },  // タクシー・電車・バス・駐車場
+  '6110':{ name:'出張旅費',         type:'expense', tax:'10' },
+  '6120':{ name:'車両費',           type:'expense', tax:'10' },  // ガソリン・車修理・タイヤ
+  '6130':{ name:'荷造運賃',         type:'expense', tax:'10' },  // 荷物発送
+  // 交際・会議
+  '6200':{ name:'接待交際費',       type:'expense', tax:'10' },  // 接待・飲食3000円以上
+  '6210':{ name:'会議費',           type:'expense', tax:'10' },  // 打ち合わせ飲食〜3000円
+  // 消耗品・事務
+  '6300':{ name:'消耗品費',         type:'expense', tax:'10' },  // 事務用品・印刷・PC等
+  '6320':{ name:'新聞図書費',       type:'expense', tax:'10' },
+  // 通信
+  '6400':{ name:'通信費',           type:'expense', tax:'10' },  // 切手・郵便・電話
+  // 福利厚生
+  '6500':{ name:'福利厚生費',       type:'expense', tax:'10' },  // スタッフ食料品・飲み物
+  // 広告
+  '6600':{ name:'広告宣伝費',       type:'expense', tax:'10' },
+  // 地代家賃・水光熱
+  '6700':{ name:'地代家賃',         type:'expense', tax:'10' },
+  '6800':{ name:'水道光熱費',       type:'expense', tax:'10' },
+  // その他経費
+  '6900':{ name:'修繕費',           type:'expense', tax:'10' },
+  '7000':{ name:'雑費',             type:'expense', tax:'10' },
+  '7100':{ name:'保険料',           type:'expense', tax:'0'  },
+  '7300':{ name:'租税公課',         type:'expense', tax:'no' },  // 収入印紙・税金
+  '7400':{ name:'減価償却費',       type:'expense', tax:'no' },
+  // 資産
+  '1500':{ name:'仮払金',           type:'asset',   tax:'no' },
+  '1510':{ name:'立替金',           type:'asset',   tax:'no' },
+  '1520':{ name:'前払費用',         type:'asset',   tax:'no' },
+  '1700':{ name:'車両運搬具',       type:'asset',   tax:'10' },  // 高額車両関連
 };
 
 const CR_ACCT = [
@@ -993,19 +1004,22 @@ async function analyzeAI(b64, mime) {
 
   const prompt = `レシート画像を解析してJSONのみ返してください。余計な文字・マークダウン不要。
 
-返すJSON（項目を必ず全て含める）:
+返すJSON:
 {"store":"支払先名","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","crAccountCode":"1030","memo":"摘要","total":0,"items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]}
 
-勘定科目ルール:
-- タクシー・電車・バス・駐車場・ガソリン・燃料 → 6100（旅費交通費）※ガソリンは水道光熱費6800ではない
-- 接待・会食（社外） → 6200
-- 社内会議・社内飲食 → 6210
-- 食料品・飲料（軽減税率） → 6500、taxType:"8"
-- 文房具・コピー用紙・プリント・印刷 → 6310（事務用品費）※租税公課7300ではない
-- 切手・収入印紙 → 7300、taxType:"no"
+【科目ルール（必ず守ること）】
+- タクシー・電車・バス・駐車場 → 6100（旅費交通費）
+- ガソリン・燃料・車修理・タイヤ → 6120（車両費）※水道光熱費6800や旅費交通費6100は絶対に使わない
+- 接待・会食（社外・3000円以上） → 6200（接待交際費）
+- 打ち合わせ・社内飲食（3000円未満） → 6210（会議費）
+- スタッフの食料品・飲み物 → 6500（福利厚生費）taxType:"10"
+- 事務用品・消耗品・印刷・コピー・文房具 → 6300（消耗品費）※租税公課7300は絶対使わない
+- 切手・郵便（手紙・書類送付） → 6400（通信費）taxType:"10"
+- 荷物発送・宅配便 → 6130（荷造運賃）
+- 収入印紙 → 7300（租税公課）taxType:"no"
+- 食料品（軽減税率） → taxType:"8"
 
-taxTypeは課税10%→"10"、軽減8%→"8"、非課税→"0"、不課税→"no"
-totalは税込合計金額（整数）。`;
+totalは税込合計金額（整数）。taxType: 課税10%→"10"、軽減8%→"8"、非課税→"0"、不課税→"no"`;
 
   const apiKey = getApiKey();
   // Artifact環境の判定:
@@ -1953,6 +1967,45 @@ function bulkChangeCr() {
   receipts.forEach(r => { r.crAccountCode = code; });
   save(); renderList(); updateHeader(); renderOverview();
   toast(`✓ ${receipts.length}件を「${names[code]}」に一括変更しました`);
+  document.getElementById('syncModal').classList.add('hide');
+}
+
+// 既存データの科目を新ルールに一括変換
+const ACCT_REMAP = {
+  // ガソリン・車両費：6100旅費交通費→6120車両費（摘要にガソリン・ガス・燃料・修理・タイヤが含まれる場合）
+  // 接待：6220接待飲食費→6200接待交際費
+  '6220': '6200',
+  // 事務用品費：6310→6300消耗品費
+  '6310': '6300',
+  // 郵便費：6410→6400通信費
+  '6410': '6400',
+  // 食事代（社内）：6510→6500福利厚生費
+  '6510': '6500',
+  // 交際費：6200→6200（そのまま、名称変更のみ）
+  // 新聞図書費：7100→6320
+  '7100': '6320',
+};
+
+const GASOLINE_KEYWORDS = ['ガソリン','ガス','燃料','給油','エネオス','出光','コスモ','シェル','修理','タイヤ','整備','オイル'];
+
+function bulkRemapAcct() {
+  let changed = 0;
+  receipts.forEach(r => {
+    const memo = (r.memo||'') + (r.store||'');
+    // ガソリン・車両費の自動判定
+    if (r.accountCode === '6100' && GASOLINE_KEYWORDS.some(k => memo.includes(k))) {
+      r.accountCode = '6120';
+      changed++;
+      return;
+    }
+    // 科目コードマッピング
+    if (ACCT_REMAP[r.accountCode]) {
+      r.accountCode = ACCT_REMAP[r.accountCode];
+      changed++;
+    }
+  });
+  save(); renderList(); updateHeader(); renderOverview();
+  toast(`✓ ${changed}件の科目を新ルールに変換しました`);
   document.getElementById('syncModal').classList.add('hide');
 }
 
