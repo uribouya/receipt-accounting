@@ -1195,11 +1195,12 @@ function renderList() {
 function delRec(id, e) {
   e.stopPropagation();
   const rec = receipts.find(r => r.id === id);
-  if (rec) {
-    trash.unshift(rec);
-    if (trash.length > 30) trash = trash.slice(0, 30);
-    localStorage.setItem('corp_trash', JSON.stringify(trash));
-  }
+  if (!rec) return;
+  const label = (rec.store||'不明') + ' ' + (rec.date||'');
+  if (!confirm(`「${label}」を削除しますか？\nゴミ箱から復元できます。`)) return;
+  trash.unshift(rec);
+  if (trash.length > 30) trash = trash.slice(0, 30);
+  localStorage.setItem('corp_trash', JSON.stringify(trash));
   receipts = receipts.filter(r => r.id !== id);
   if (curId === id) { curId = null; setTab('ov'); }
   save(); renderList(); updateHeader();
@@ -1589,27 +1590,30 @@ function renderBankTab() {
     </div>
   </div>
 
-  ${curBankId ? renderBankDetail() : '<div class="card"><div class="ch"><div class="ch-t">📝 明細編集</div></div><div class="cb" style="color:var(--tx3);text-align:center;padding:20px">左のリストから明細を選択してください</div></div>'}
+  ${renderBankDetail()}
   `;
 }
 
 function renderBankDetail() {
   const r = bankEntries.find(r=>r.id===curBankId);
-  if (!r) return '';
+  if (!r) return `<div class="card"><div class="ch"><div class="ch-t">📝 明細編集</div></div><div class="cb" style="color:var(--tx3);text-align:center;padding:20px">←左のリストから明細を選択してください</div></div>`;
+  const isIncome = r.total >= 0;
   return `<div class="card">
-    <div class="ch"><div class="ch-t">📝 明細編集</div></div>
+    <div class="ch">
+      <div class="ch-t">📝 明細編集：${esc(r.memo||r.store||'不明')} <span style="color:${isIncome?'var(--grn)':'var(--red)'}">${isIncome?'↑入金':'↓出金'}</span></div>
+    </div>
     <div class="cb">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end">
         <div>
           <div class="fl">取引日付</div>
           <input class="fi" type="date" value="${r.date||''}" onchange="updBank('${r.id}','date',this.value)">
         </div>
         <div>
           <div class="fl">金額（入金+・出金-）</div>
-          <input class="fi" type="number" value="${r.total||0}" onchange="updBank('${r.id}','total',+this.value)">
+          <input class="fi" type="number" value="${r.total||0}" onchange="updBank('${r.id}','total',+this.value)" style="color:${isIncome?'var(--grn)':'var(--red)'}">
         </div>
         <div>
-          <div class="fl">摘要</div>
+          <div class="fl">摘要（相手先名）</div>
           <input class="fi" type="text" value="${esc(r.memo||r.store||'')}" onchange="updBank('${r.id}','memo',this.value)">
         </div>
         <div>
@@ -1617,8 +1621,10 @@ function renderBankDetail() {
           <select class="fi" onchange="updBank('${r.id}','accountCode',this.value)">${acctOpts(r.accountCode)}</select>
         </div>
       </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button onclick="deleteBankEntryById('${r.id}')" style="background:var(--red);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer">🗑 削除</button>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <button onclick="swapBankSign('${r.id}')" style="background:var(--amb2);border:1px solid var(--gold);color:var(--tx);border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer">⇄ 入出金を反転</button>
+        <button onclick="deleteBankEntryById('${r.id}')" style="background:var(--red);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer">🗑 削除</button>
+        <span style="font-size:11px;color:var(--tx3)">金額を+にすると入金、-にすると出金になります</span>
       </div>
     </div>
   </div>`;
@@ -1627,6 +1633,15 @@ function renderBankDetail() {
 function updBank(id, field, value) {
   const r = bankEntries.find(r=>r.id===id);
   if (r) { r[field] = value; saveBankEntries(); renderBankTab(); }
+}
+
+function swapBankSign(id) {
+  const r = bankEntries.find(r=>r.id===id);
+  if (!r) return;
+  r.total = -(r.total||0);
+  saveBankEntries();
+  renderBankTab();
+  toast(r.total>=0 ? '↑入金に変更しました' : '↓出金に変更しました');
 }
 
 function deleteBankEntryById(id) {
@@ -1660,6 +1675,9 @@ function renderBankList() {
       <div class="rc-mid">
         <div class="rc-acct">${a?a.name:'—'}</div>
         <div class="rc-date">${r.date||''}</div>
+      </div>
+      <div class="rc-bot">
+        <button class="delbtn" onclick="event.stopPropagation();deleteBankEntryById('${r.id}')" title="削除">🗑 削除</button>
       </div>
     </div>`;
   }).join('');
@@ -2023,11 +2041,32 @@ async function analyzeBankPDF(file) {
     });
 
     const isPdf = file.type === 'application/pdf';
-    const prompt = `この通帳・明細書の画像を解析して、全取引をJSON配列で返してください。
-各取引は以下の形式：
-{"date":"YYYY-MM-DD","memo":"摘要","total":金額（出金はマイナス、入金はプラス）,"accountCode":"科目コード","taxType":"no"}
-科目コード: 売上金入金→4000、給与支払→6700、家賃→7000、水道光熱→6800、通信費→6500、税金→7300、借入返済→2500、その他出金→6999
-JSON配列のみ返答。説明不要。`;
+    // 年を推定（通帳の年が不明な場合のため）
+    const thisYear = new Date().getFullYear();
+    const prompt = `あなたは日本の銀行通帳・口座明細の読み取り専門家です。
+この画像に写っている通帳または口座明細書の全取引を正確に読み取り、JSON配列で返してください。
+
+【重要ルール】
+1. 日付は必ずYYYY-MM-DD形式。通帳に年が省略されている場合は${thisYear}年または${thisYear-1}年を文脈から判断して補完すること
+2. 金額：入金（振込入金・売上入金等）はプラス、出金（引落・振込出金等）はマイナス
+3. 全ての行を漏れなく読み取ること。読み取れない文字は「不明」とする
+4. 摘要は通帳に記載された内容をそのまま転記する
+
+【返すJSON配列の形式】
+[{"date":"YYYY-MM-DD","memo":"摘要（通帳記載のまま）","total":金額（整数）,"accountCode":"科目コード","taxType":"no"}]
+
+【科目コード】
+- 売上・報酬・収入の入金 → "4000"
+- 給与・役員報酬の支払 → "6700"
+- 家賃・地代の支払 → "6700"
+- 社会保険料・税金の引落 → "7300"
+- 水道光熱費の引落 → "6800"
+- 通信費（電話・ネット）の引落 → "6400"
+- 借入金の返済 → "2500"
+- その他の出金 → "6999"
+- その他の入金 → "4999"
+
+JSON配列のみ返答。前後の説明・マークダウン不要。`;
 
     const msgContent = isPdf
       ? [{ type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:prompt}]
@@ -2044,7 +2083,7 @@ JSON配列のみ返答。説明不要。`;
       },
       body: JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:2000,
+        max_tokens:4000,
         messages:[{role:'user', content:msgContent}]
       })
     });
