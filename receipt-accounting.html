@@ -670,6 +670,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   <div class="left" id="leftPanel">
     <div class="left-drag"></div>
     <button class="sheet-close" onclick="closeSheet()">✕ 閉じる</button>
+    <div id="uploadArea">
     <div class="uparea" id="dz" ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" onclick="document.getElementById('fi').click()">
       <div class="up-t" style="font-size:13px;font-weight:600">🧾 レシートを読み込む</div>
       <div class="up-s">複数枚同時選択OK・ドラッグ＆ドロップ対応</div>
@@ -681,6 +682,11 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 
     <input type="file" id="fi" accept="image/*" multiple onchange="onFile(event)">
     <input type="file" id="ci" accept="image/*" capture="environment" onchange="onFile(event)">
+    </div><!-- /uploadArea -->
+    <div id="bankUploadArea" style="display:none;padding:8px 14px;">
+      <button onclick="showAddBankModal()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;margin-bottom:6px">＋ 手動で明細追加</button>
+      <button onclick="showBankModal()" style="width:100%;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:8px;font-size:12px;cursor:pointer">📄 PDFから読み込む</button>
+    </div>
     <!-- バッチ進捗 -->
     <div class="batch-wrap" id="batchWrap">
       <div class="batch-header">
@@ -714,6 +720,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
         <button class="tab active" id="tOv" onclick="setTab('ov')">📊 概要</button>
         <button class="tab" id="tDt" onclick="setTab('dt')">📝 伝票</button>
         <button class="tab" id="tJr" onclick="setTab('jr')">📒 仕訳</button>
+        <button class="tab" id="tBk" onclick="setTab('bk')">🏦 通帳</button>
       </div>
     </div>
     <div class="content" id="content"></div>
@@ -1255,13 +1262,21 @@ function selectRec(id) {
 // ══════════════════════════════
 function setTab(t) {
   curTab = t;
-  ['ov','dt','jr'].forEach(x => document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1))?.classList.toggle('active', x===t));
+  ['ov','dt','jr','bk'].forEach(x => document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1))?.classList.toggle('active', x===t));
+  // 通帳タブ時はアップロードエリアを非表示
+  const uparea = document.getElementById('uploadArea');
+  const bankArea = document.getElementById('bankUploadArea');
+  if (uparea) uparea.style.display = t==='bk' ? 'none' : '';
+  if (bankArea) bankArea.style.display = t==='bk' ? 'block' : 'none';
+  // リスト表示を更新
+  if (t !== 'bk') { renderList(); }
   renderTab();
 }
 function renderTab() {
   if (curTab==='ov') renderOverview();
   else if (curTab==='dt') renderDetail();
   else if (curTab==='jr') renderJournal();
+  else if (curTab==='bk') renderBankTab();
 }
 
 // ══════════════════════════════
@@ -1463,6 +1478,205 @@ function renderJournal() {
     </table>
     </div>
   </div>`;
+}
+
+// ══════════════════════════════
+// 通帳タブ
+// ══════════════════════════════
+let curBankId = null;
+
+function renderBankTab() {
+  const el = document.getElementById('content');
+  // 左リストも通帳データで更新
+  renderBankList();
+
+  if (!bankEntries.length) {
+    el.innerHTML = `
+    <div style="text-align:center;padding:60px;color:var(--tx3)">
+      <div style="font-size:48px;opacity:.2;margin-bottom:16px">🏦</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">通帳データがありません</div>
+      <div style="font-size:12px">「通帳管理」ボタンからPDFをアップロードするか、手動で追加してください</div>
+      <button onclick="showAddBankModal()" style="margin-top:20px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;cursor:pointer">＋ 手動追加</button>
+    </div>`;
+    return;
+  }
+
+  // 集計
+  const income = bankEntries.filter(r=>r.total>0).reduce((s,r)=>s+(r.total||0),0);
+  const expense = bankEntries.filter(r=>r.total<0).reduce((s,r)=>s+Math.abs(r.total||0),0);
+  const balance = income - expense;
+
+  // 月別集計
+  const months = {};
+  const now = new Date();
+  const fiscalStartYear = (now.getMonth()+1) >= 4 ? now.getFullYear() : now.getFullYear()-1;
+  for (let i=0;i<12;i++) {
+    const m = ((3+i)%12)+1;
+    const y = m>=4 ? fiscalStartYear : fiscalStartYear+1;
+    const key = `${y}-${String(m).padStart(2,'0')}`;
+    months[key] = {label:`${m}月`, income:0, expense:0};
+  }
+  bankEntries.forEach(r => {
+    const key = r.date ? r.date.slice(0,7) : '';
+    if (months[key]) {
+      if (r.total > 0) months[key].income += r.total;
+      else months[key].expense += Math.abs(r.total||0);
+    }
+  });
+  const maxM = Math.max(...Object.values(months).map(m=>Math.max(m.income,m.expense)),1);
+
+  // 科目別集計
+  const acctMap = {};
+  bankEntries.forEach(r => {
+    const c = r.accountCode||'0000';
+    if (!acctMap[c]) acctMap[c] = {income:0, expense:0};
+    if (r.total>0) acctMap[c].income += r.total;
+    else acctMap[c].expense += Math.abs(r.total||0);
+  });
+
+  el.innerHTML = `
+  <div class="kg4">
+    <div class="kc"><div class="kc-l">入金合計</div><div class="kc-v" style="color:var(--grn)">${fmt(income)}</div><div class="kc-s">${bankEntries.filter(r=>r.total>0).length}件</div></div>
+    <div class="kc"><div class="kc-l">出金合計</div><div class="kc-v" style="color:var(--red)">${fmt(expense)}</div><div class="kc-s">${bankEntries.filter(r=>r.total<0).length}件</div></div>
+    <div class="kc"><div class="kc-l">差引残高</div><div class="kc-v bl">${fmt(balance)}</div><div class="kc-s">入金－出金</div></div>
+    <div class="kc"><div class="kc-l">合計件数</div><div class="kc-v" style="color:var(--tx2)">${bankEntries.length}件</div><div class="kc-s"><button onclick="showAddBankModal()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">＋追加</button></div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="card">
+      <div class="ch"><div class="ch-t">📒 科目別集計</div></div>
+      <div class="cb">
+        ${Object.entries(acctMap).sort((a,b)=>Math.abs(b[1].expense)-Math.abs(a[1].expense)).map(([c,v])=>{
+          const a = ACCT[c];
+          const maxV = Math.max(v.income, v.expense, 1);
+          return `<div class="arow">
+            <div class="acode">${c}</div>
+            <div class="aname">${a?a.name:'不明'}</div>
+            <div class="abar-w">
+              ${v.income>0?`<div style="height:8px;width:${Math.round(v.income/maxM*100)}%;background:var(--grn);border-radius:2px;margin-bottom:2px"></div>`:''}
+              ${v.expense>0?`<div style="height:8px;width:${Math.round(v.expense/maxM*100)}%;background:var(--red);border-radius:2px"></div>`:''}
+            </div>
+            <div class="aamt" style="font-size:10px">
+              ${v.income>0?`<span style="color:var(--grn)">+${fmt(v.income)}</span>`:''}
+              ${v.expense>0?`<span style="color:var(--red)">-${fmt(v.expense)}</span>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><div class="ch-t">📅 月別入出金</div></div>
+      <div class="cb">
+        <div style="display:flex;gap:8px;margin-bottom:6px;font-size:10px">
+          <span style="color:var(--grn)">■ 入金</span>
+          <span style="color:var(--red)">■ 出金</span>
+        </div>
+        <div class="mbars">
+          ${Object.values(months).map(m=>`
+            <div class="mb-i">
+              <div class="mb-l">${m.label}</div>
+              <div class="mbar-w" style="display:flex;flex-direction:column;gap:2px;height:auto;background:none">
+                <div style="height:9px;background:var(--s2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${m.income>0?Math.max(3,Math.round(m.income/maxM*100)):0}%;background:var(--grn);border-radius:3px"></div></div>
+                <div style="height:9px;background:var(--s2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${m.expense>0?Math.max(3,Math.round(m.expense/maxM*100)):0}%;background:var(--red);border-radius:3px"></div></div>
+              </div>
+              <div class="mb-v" style="font-size:9px;text-align:right">
+                ${m.income>0?`<div style="color:var(--grn)">${fmt(m.income)}</div>`:''}
+                ${m.expense>0?`<div style="color:var(--red)">${fmt(m.expense)}</div>`:''}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  ${curBankId ? renderBankDetail() : '<div class="card"><div class="ch"><div class="ch-t">📝 明細編集</div></div><div class="cb" style="color:var(--tx3);text-align:center;padding:20px">左のリストから明細を選択してください</div></div>'}
+  `;
+}
+
+function renderBankDetail() {
+  const r = bankEntries.find(r=>r.id===curBankId);
+  if (!r) return '';
+  return `<div class="card">
+    <div class="ch"><div class="ch-t">📝 明細編集</div></div>
+    <div class="cb">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div class="fl">取引日付</div>
+          <input class="fi" type="date" value="${r.date||''}" onchange="updBank('${r.id}','date',this.value)">
+        </div>
+        <div>
+          <div class="fl">金額（入金+・出金-）</div>
+          <input class="fi" type="number" value="${r.total||0}" onchange="updBank('${r.id}','total',+this.value)">
+        </div>
+        <div>
+          <div class="fl">摘要</div>
+          <input class="fi" type="text" value="${esc(r.memo||r.store||'')}" onchange="updBank('${r.id}','memo',this.value)">
+        </div>
+        <div>
+          <div class="fl">勘定科目</div>
+          <select class="fi" onchange="updBank('${r.id}','accountCode',this.value)">${acctOpts(r.accountCode)}</select>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button onclick="deleteBankEntryById('${r.id}')" style="background:var(--red);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer">🗑 削除</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updBank(id, field, value) {
+  const r = bankEntries.find(r=>r.id===id);
+  if (r) { r[field] = value; saveBankEntries(); renderBankTab(); }
+}
+
+function deleteBankEntryById(id) {
+  if (!confirm('この明細を削除しますか？')) return;
+  bankEntries = bankEntries.filter(r=>r.id!==id);
+  curBankId = null;
+  saveBankEntries();
+  renderBankTab();
+  toast('削除しました');
+}
+
+function renderBankList() {
+  // 左パネルのリストを通帳データで上書き（通帳タブ選択時のみ）
+  if (curTab !== 'bk') return;
+  const el = document.getElementById('rlist');
+  const lcEl = document.getElementById('lc');
+  if (lcEl) lcEl.textContent = bankEntries.length;
+  if (!bankEntries.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-i">🏦</div><div>通帳データがありません</div></div>';
+    return;
+  }
+  const sorted = [...bankEntries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  el.innerHTML = sorted.map(r => {
+    const isIncome = r.total >= 0;
+    const a = ACCT[r.accountCode];
+    return `<div class="rc ${curBankId===r.id?'active':''}" onclick="selectBank('${r.id}')">
+      <div class="rc-top">
+        <div class="rc-store">${isIncome?'↑':'↓'} ${esc(r.memo||r.store||'不明')}</div>
+        <div class="rc-total" style="color:${isIncome?'var(--grn)':'var(--red)'}">${isIncome?'+':''}${fmt(r.total||0)}</div>
+      </div>
+      <div class="rc-mid">
+        <div class="rc-acct">${a?a.name:'—'}</div>
+        <div class="rc-date">${r.date||''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectBank(id) {
+  curBankId = id;
+  renderBankTab();
+}
+
+function showAddBankModal() {
+  const id = genId();
+  const today = new Date().toISOString().slice(0,10);
+  bankEntries.unshift({id, date:today, memo:'', total:0, accountCode:'1010', createdAt:new Date().toISOString()});
+  curBankId = id;
+  saveBankEntries();
+  renderBankTab();
 }
 
 // ══════════════════════════════
