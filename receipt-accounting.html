@@ -1892,13 +1892,45 @@ function exportExcel() {
   ws4['!cols']=[{wch:4},{wch:12},{wch:20},{wch:22},{wch:16},{wch:12},{wch:6},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws4, '品目明細');
 
+  // シート5: 通帳・口座明細
+  if (bankEntries.length > 0) {
+    const bankIncome = bankEntries.filter(r=>r.total>0).reduce((s,r)=>s+(r.total||0),0);
+    const bankExpense = bankEntries.filter(r=>r.total<0).reduce((s,r)=>s+Math.abs(r.total||0),0);
+    const ws5data = [
+      ['通帳・口座明細'],
+      ['出力日時', new Date().toLocaleString('ja-JP')],
+      [],
+      ['No','取引日付','摘要（相手先）','入金','出金','勘定科目コード','勘定科目名'],
+      ...[...bankEntries].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map((r,i)=>{
+        const a = ACCT[r.accountCode];
+        const isIncome = r.total >= 0;
+        return [
+          i+1,
+          r.date||'',
+          r.memo||r.store||'',
+          isIncome ? (r.total||0) : '',
+          !isIncome ? Math.abs(r.total||0) : '',
+          r.accountCode||'',
+          a ? a.name : '不明'
+        ];
+      }),
+      [],
+      ['','','合計', bankIncome, bankExpense, '', ''],
+      ['','','差引残高（入金－出金）', bankIncome - bankExpense, '', '', '']
+    ];
+    const ws5 = XLSX.utils.aoa_to_sheet(ws5data);
+    ws5['!cols']=[{wch:4},{wch:12},{wch:28},{wch:14},{wch:14},{wch:8},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, ws5, '通帳明細');
+  }
+
+  const sheetCount = 4 + (bankEntries.length > 0 ? 1 : 0);
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
   const xla=document.createElement('a');
   xla.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
   xla.download=`法人経費_${new Date().toISOString().slice(0,10)}.xlsx`;
   document.body.appendChild(xla); xla.click();
   setTimeout(()=>{document.body.removeChild(xla);},1000);
-  toast('✓ Excelを出力しました（4シート）');
+  toast(`✓ Excelを出力しました（${sheetCount}シート）`);
 }
 
 // ══════════════════════════════
