@@ -550,6 +550,57 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   </div>
 </div>
 
+<!-- 手動経費入力モーダル -->
+<div class="sync-modal hide" id="manualInputModal">
+  <div class="sync-inner" style="max-width:500px">
+    <div class="sync-title">✏️ 手動で経費を追加</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div>
+        <div class="fl">取引日付 <span style="color:red">*</span></div>
+        <input class="fi" type="date" id="mi_date" value="">
+      </div>
+      <div>
+        <div class="fl">合計金額（税込）<span style="color:red">*</span></div>
+        <input class="fi" type="number" id="mi_total" placeholder="例: 1500">
+      </div>
+      <div>
+        <div class="fl">支払先・店名 <span style="color:red">*</span></div>
+        <input class="fi" type="text" id="mi_store" placeholder="例: タクシー会社">
+      </div>
+      <div>
+        <div class="fl">勘定科目</div>
+        <select class="fi" id="mi_account"></select>
+      </div>
+      <div>
+        <div class="fl">消費税区分</div>
+        <select class="fi" id="mi_tax">
+          <option value="10">課税10%</option>
+          <option value="8">軽減8%</option>
+          <option value="0">非課税</option>
+          <option value="no">不課税（対象外）</option>
+        </select>
+      </div>
+      <div>
+        <div class="fl">支払方法</div>
+        <select class="fi" id="mi_cr">
+          <option value="1030">小口現金</option>
+          <option value="1000">現金</option>
+          <option value="2100">未払金（法人カード）</option>
+          <option value="1010">普通預金</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <div class="fl">摘要・メモ</div>
+        <input class="fi" type="text" id="mi_memo" placeholder="例: 〇〇との打ち合わせ">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="sync-btn sync-btn-p" style="flex:2;padding:12px" onclick="saveManualInput()">💾 登録</button>
+      <button class="sync-btn sync-btn-s" style="flex:1;padding:12px" onclick="document.getElementById('manualInputModal').classList.add('hide')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <!-- ゴミ箱モーダル -->
 <div class="sync-modal hide" id="trashModal">
   <div class="sync-inner" style="max-width:480px">
@@ -696,6 +747,15 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
       <div class="batch-bar-bg"><div class="batch-bar" id="batchBar" style="width:0%"></div></div>
       <div class="batch-log" id="batchLog"></div>
     </div>
+    <div style="padding:6px 14px 2px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <span style="font-size:10px;color:var(--tx3);font-weight:600">年度：</span>
+      <select id="fiscalYearSelect" onchange="changeFiscalYear(+this.value)" style="font-size:11px;border:1px solid var(--bd);border-radius:6px;padding:2px 6px;background:var(--surface);cursor:pointer;">
+        <option value="2024">令和6年度（2024）</option>
+        <option value="2025" selected>令和7年度（2025）</option>
+        <option value="2026">令和8年度（2026）</option>
+      </select>
+      <span id="fiscalYearLabel" style="font-size:10px;color:var(--accent2);font-weight:600"></span>
+    </div>
     <div class="lh" style="flex-wrap:wrap;gap:4px">
       <div class="lh-t">経費一覧</div>
       <div class="badge" id="lc">0</div>
@@ -840,6 +900,12 @@ let receipts = JSON.parse(localStorage.getItem('corp_r2') || '[]');
 let trash = JSON.parse(localStorage.getItem('corp_trash') || '[]'); // 削除済みバッファ（最大30件）
 let sortMode = 'date-desc'; // date-desc, date-asc, amt-desc, created
 let errFilterOn = false; // 日付エラーフィルター
+let currentFiscalYear = (() => {
+  const saved = localStorage.getItem('corp_fiscal');
+  if (saved) return parseInt(saved);
+  const now = new Date();
+  return (now.getMonth()+1) >= 4 ? now.getFullYear() : now.getFullYear()-1;
+})(); // 現在表示中の年度（開始年）例: 2025 = 令和7年度
 let curId = null;
 let curTab = 'ov';
 
@@ -1134,8 +1200,26 @@ function isDateError(date) {
   const d = new Date(date);
   if (isNaN(d)) return true;
   const y = d.getFullYear(), m = d.getMonth()+1;
-  // 令和7年度: 2025年4月〜2026年3月
-  return !((y===2025 && m>=4) || (y===2026 && m<=3));
+  const fy = currentFiscalYear;
+  return !((y===fy && m>=4) || (y===fy+1 && m<=3));
+}
+
+function getFilteredReceipts() {
+  // 現在の年度のデータのみ返す
+  return receipts.filter(r => !isDateError(r.date));
+}
+
+function getFiscalLabel(fy) {
+  const reiwa = fy - 2018;
+  return `令和${reiwa}年度（${fy}年4月〜${fy+1}年3月）`;
+}
+
+function changeFiscalYear(fy) {
+  currentFiscalYear = fy;
+  localStorage.setItem('corp_fiscal', fy);
+  errFilterOn = false;
+  renderList(); updateHeader(); renderOverview();
+  document.getElementById('fiscalYearLabel').textContent = getFiscalLabel(fy);
 }
 
 function setSort(mode) {
@@ -1157,9 +1241,15 @@ function toggleErrFilter() {
 
 function renderList() {
   const el = document.getElementById('rlist');
-  document.getElementById('lc').textContent = receipts.length;
+  // 年度セレクトの同期
+  const fySelect = document.getElementById('fiscalYearSelect');
+  if (fySelect) fySelect.value = currentFiscalYear;
 
-  // エラー件数バッジ
+  // 年度内データのみ
+  const fyReceipts = getFilteredReceipts();
+  document.getElementById('lc').textContent = fyReceipts.length;
+
+  // エラー件数バッジ（年度外データ）
   const errList = receipts.filter(r => isDateError(r.date));
   const errBadge = document.getElementById('errBadge');
   const errCnt = document.getElementById('errCnt');
@@ -1170,10 +1260,14 @@ function renderList() {
     errBadge.style.display = 'none';
   }
 
+  if (!fyReceipts.length && !errFilterOn) {
+    el.innerHTML='<div class="empty"><div class="empty-i">📂</div><div>この年度のデータがありません</div></div>';
+    return;
+  }
   if (!receipts.length) { el.innerHTML='<div class="empty"><div class="empty-i">📂</div><div>レシートを追加してください</div></div>'; return; }
 
   // フィルター
-  let list = errFilterOn ? errList : [...receipts];
+  let list = errFilterOn ? errList : [...fyReceipts];
 
   // ソート
   if (sortMode === 'date-desc') list.sort((a,b) => (b.date||'').localeCompare(a.date||''));
@@ -1717,17 +1811,18 @@ function renderOverview() {
     el.innerHTML='<div style="text-align:center;padding:80px;color:var(--tx3)"><div style="font-size:52px;opacity:.2;margin-bottom:14px">📊</div><div>レシートを追加すると集計が表示されます</div></div>';
     return;
   }
-  const total = receipts.reduce((s,r)=>s+(r.total||0),0);
-  const tax   = receipts.reduce((s,r)=>s+calcTax(r).tax,0);
+  const fyData = getFilteredReceipts();
+  const total = fyData.reduce((s,r)=>s+(r.total||0),0);
+  const tax   = fyData.reduce((s,r)=>s+calcTax(r).tax,0);
   const now   = new Date();
   const mk    = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const mRecs = receipts.filter(r=>r.date?.startsWith(mk));
+  const mRecs = fyData.filter(r=>r.date?.startsWith(mk));
   const mTot  = mRecs.reduce((s,r)=>s+(r.total||0),0);
-  const avg   = Math.round(total/receipts.length);
+  const avg   = fyData.length ? Math.round(total/fyData.length) : 0;
 
   // 科目別
   const aMap={};
-  receipts.forEach(r=>{ const c=r.accountCode||'0000'; aMap[c]=(aMap[c]||0)+(r.total||0); });
+  fyData.forEach(r=>{ const c=r.accountCode||'0000'; aMap[c]=(aMap[c]||0)+(r.total||0); });
   const maxA = Math.max(...Object.values(aMap),1);
 
   // 月別（4月始まり12ヶ月）
@@ -1803,8 +1898,9 @@ function renderOverview() {
 // HEADER
 // ══════════════════════════════
 function updateHeader() {
-  const total=receipts.reduce((s,r)=>s+(r.total||0),0);
-  const tax=receipts.reduce((s,r)=>s+calcTax(r).tax,0);
+  const fyData = getFilteredReceipts();
+  const total=fyData.reduce((s,r)=>s+(r.total||0),0);
+  const tax=fyData.reduce((s,r)=>s+calcTax(r).tax,0);
   document.getElementById('hC').textContent=receipts.length;
   document.getElementById('hT').textContent=fmt(total);
   document.getElementById('hTx').textContent=fmt(tax);
@@ -2165,6 +2261,48 @@ JSON配列のみ返答。前後の説明・マークダウン不要。`;
 // GitHub Gist 同期
 // ══════════════════════════════
 // ══════════════════════════════
+// 手動経費入力
+function showManualInputModal() {
+  // 科目セレクトを動的生成
+  const sel = document.getElementById('mi_account');
+  sel.innerHTML = Object.entries(ACCT).map(([c,a])=>`<option value="${c}" ${c==='6100'?'selected':''}>${c} ${a.name}</option>`).join('');
+  // 今日の日付をデフォルト
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('mi_date').value = today;
+  document.getElementById('mi_total').value = '';
+  document.getElementById('mi_store').value = '';
+  document.getElementById('mi_memo').value = '';
+  document.getElementById('manualInputModal').classList.remove('hide');
+}
+
+function saveManualInput() {
+  const date  = document.getElementById('mi_date').value;
+  const total = +document.getElementById('mi_total').value;
+  const store = document.getElementById('mi_store').value.trim();
+  const accountCode = document.getElementById('mi_account').value;
+  const taxType = document.getElementById('mi_tax').value;
+  const crAccountCode = document.getElementById('mi_cr').value;
+  const memo  = document.getElementById('mi_memo').value.trim();
+
+  if (!date) { toast('日付を入力してください', true); return; }
+  if (!total) { toast('金額を入力してください', true); return; }
+  if (!store) { toast('支払先を入力してください', true); return; }
+
+  const rec = {
+    id: genId(),
+    img: null, imgType: null,
+    createdAt: new Date().toISOString(),
+    store, date, accountCode, taxType, crAccountCode,
+    memo: memo || store,
+    total,
+    items: [{ name: memo||store, qty:1, unitPrice:total, price:total, accountCode, taxType }]
+  };
+  receipts.unshift(rec);
+  save(); renderList(); updateHeader(); renderOverview();
+  document.getElementById('manualInputModal').classList.add('hide');
+  toast(`✓ 「${store}」を登録しました`);
+}
+
 // 手動入力（Artifactアプリ用）
 // ══════════════════════════════
 let _manualB64 = null, _manualMime = null;
