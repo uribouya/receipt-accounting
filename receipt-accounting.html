@@ -1196,17 +1196,29 @@ totalは税込合計金額（整数）。taxType: 課税10%→"10"、軽減8%→
 // LIST
 // ══════════════════════════════
 function isDateError(date) {
+  // 真の日付エラー：日付未設定、無効な日付、サポート対象外（令和6〜8年度の範囲外）のみ
   if (!date) return true;
   const d = new Date(date);
   if (isNaN(d)) return true;
   const y = d.getFullYear(), m = d.getMonth()+1;
+  // 令和6年度（2024-04）〜令和8年度（2027-03）の範囲外なら真のエラー
+  const isInSupportedRange = (y===2024 && m>=4) || (y===2025) || (y===2026) || (y===2027 && m<=3);
+  return !isInSupportedRange;
+}
+
+function isInCurrentFiscalYear(date) {
+  // 現在選択中の年度に含まれるかチェック（純粋に年度判定）
+  if (!date) return false;
+  const d = new Date(date);
+  if (isNaN(d)) return false;
+  const y = d.getFullYear(), m = d.getMonth()+1;
   const fy = currentFiscalYear;
-  return !((y===fy && m>=4) || (y===fy+1 && m<=3));
+  return (y===fy && m>=4) || (y===fy+1 && m<=3);
 }
 
 function getFilteredReceipts() {
-  // 現在の年度のデータのみ返す
-  return receipts.filter(r => !isDateError(r.date));
+  // 現在の年度のデータのみ返す（他年度・真のエラー両方を除外）
+  return receipts.filter(r => isInCurrentFiscalYear(r.date));
 }
 
 function getFiscalLabel(fy) {
@@ -1279,14 +1291,15 @@ function renderList() {
     const a = ACCT[r.accountCode];
     const tt = r.taxType||'10';
     const isErr = isDateError(r.date);
-    return `<div class="rc ${curId===r.id?'active':''}" onclick="selectRec('${r.id}')" style="${isErr?'border-color:#ef4444;':''}">
+    const isOther = !isErr && !isInCurrentFiscalYear(r.date);
+    return `<div class="rc ${curId===r.id?'active':''}" onclick="selectRec('${r.id}')" style="${isErr?'border-color:#ef4444;':isOther?'border-color:#fbbf24;':''}">
       <div class="rc-top">
-        <div class="rc-store">${isErr?'⚠️ ':''}${esc(r.store||'不明')}</div>
+        <div class="rc-store">${isErr?'⚠️ ':isOther?'📅 ':''}${esc(r.store||'不明')}</div>
         <div class="rc-total">${fmt(r.total)}</div>
       </div>
       <div class="rc-mid">
         <div class="rc-acct">${a?a.name:'—'}</div>
-        <div class="rc-date" style="${isErr?'color:#ef4444;font-weight:700;':''}">${r.date||'日付なし'}</div>
+        <div class="rc-date" style="${isErr?'color:#ef4444;font-weight:700;':isOther?'color:#d97706;':''}">${r.date||'日付なし'}</div>
       </div>
       <div class="rc-bot">
         ${a?`<span class="chip ${a.type==='asset'?'c-ast':'c-exp'}">${r.accountCode} ${a.name}</span>`:''}
