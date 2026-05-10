@@ -447,7 +447,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   <div class="logo">
     <div class="logo-m">会</div>
     <div>
-      <div class="logo-n">法人レシート会計 <span style="font-size:9px;opacity:0.5">v29</span></div>
+      <div class="logo-n">法人レシート会計 <span style="font-size:9px;opacity:0.5">v30</span></div>
       <div class="logo-s">CORPORATE EXPENSE LEDGER</div>
     </div>
   </div>
@@ -639,7 +639,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
     <hr class="sync-divider">
     <div class="sync-note" style="margin-bottom:10px;font-size:11px;">
       💡 Claudeへ送るプロンプト（コピーして使用）:<br>
-      <span id="promptText" style="font-size:10px;color:#555;line-height:1.4;display:block;background:#f5f5f5;padding:6px;border-radius:6px;margin-top:4px;">このレシートを解析してJSONで返してください。形式：{"store":"支払先","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","memo":"摘要","total":0,"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"items":[{"name":"品目","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]} 勘定科目：タクシー電車→6100、接待→6200、社内会議→6210、食料品→6500軽減8、文房具→6310。JSONのみ返答。</span>
+      <span id="promptText" style="font-size:10px;color:#555;line-height:1.4;display:block;background:#f5f5f5;padding:6px;border-radius:6px;margin-top:4px;">このレシートを解析してJSONで返してください。形式：{"store":"支払先","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","memo":"摘要","total":0,"subtotalExTax":0,"taxAmount10":0,"taxAmount8":0,"items":[{"name":"品目","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]} 弥生Next準拠科目：市内タクシー駐車場→6100、宿泊出張→6110、ガソリン→6120、接待3000円〜→6200、社内会議→6210、文房具→6300、書籍→6320、切手→6400、食料品→6500軽減8、振込手数料→6740、保険→7100、収入印紙→7300。JSONのみ返答。</span>
       <button onclick="copyPrompt()" style="font-size:11px;margin-top:4px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff;">📋 プロンプトをコピー</button>
     </div>
     <textarea id="pasteJsonArea" style="width:100%;height:120px;border:1.5px solid #ddd;border-radius:8px;padding:8px;font-size:12px;resize:none;box-sizing:border-box;" placeholder='{"store":"...", "date":"2026-03-13", ...}'></textarea>
@@ -852,60 +852,64 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 // ══════════════════════════════
 // 勘定科目マスタ（法人・販管費中心）
 // ══════════════════════════════
+// ═══ 弥生会計Next準拠の勘定科目マスタ（v30・R7取込実績ベース） ═══
+// 弥生Nextは勘定科目「名」で照合する仕様のため、コード番号はアプリ内部ID扱い。
+// 名称は弥生Next登録済みの実体名と完全一致させること。
 const ACCT = {
   // ══ 収入（売上） ══
-  '4000':{ name:'相談支援売上',     type:'income',  tax:'0'  },  // 国保連・訓練等給付費・計画相談支援費すべて
-  '4020':{ name:'コンサル収入',     type:'income',  tax:'10' },  // コンサルティング・研修費
-  '4030':{ name:'雑収入',           type:'income',  tax:'10' },  // その他収入
+  '4000':{ name:'相談支援売上',     type:'income',  tax:'0'  },  // 国保連・訓練等給付費・計画相談支援費すべて（非課税）
+  '4020':{ name:'コンサル収入',     type:'income',  tax:'10' },  // コンサルティング・研修費（119インターナショナル等）
+  '4030':{ name:'雑収入',           type:'income',  tax:'10' },  // 助成金・その他収入（札幌市助成金等）
+  '4040':{ name:'売上高',           type:'income',  tax:'no' },  // 利息・手数料還元など
   // ══ 人件費 ══
   '5000':{ name:'役員報酬',         type:'cost',    tax:'no' },  // 代表理事報酬
-  '5010':{ name:'給与賃金',         type:'cost',    tax:'no' },  // スタッフ給与
-  '5020':{ name:'業務委託費',       type:'cost',    tax:'10' },  // 外部委託・業務委託
+  '5010':{ name:'給与賃金',         type:'cost',    tax:'no' },  // スタッフ給与（上田さん雇用後使用）
   '5030':{ name:'法定福利費',       type:'cost',    tax:'no' },  // 社会保険料（法人負担分）
-  // ══ 売上原価 ══
+  // ══ 売上原価／外注 ══
   '5110':{ name:'仕入高',           type:'cost',    tax:'10' },
-  '5120':{ name:'外注費',           type:'cost',    tax:'10' },
+  '5120':{ name:'外注費',           type:'cost',    tax:'10' },  // 業務委託・外部委託（旧:業務委託費5020はこれに統合）
   // ══ 旅費・交通 ══
-  '6100':{ name:'旅費交通費',       type:'expense', tax:'10' },  // タクシー・電車・バス・駐車場
-  '6110':{ name:'出張旅費',         type:'expense', tax:'10' },
-  '6120':{ name:'車両費',           type:'expense', tax:'10' },  // ガソリン・車修理・タイヤ
+  '6100':{ name:'旅費交通費',       type:'expense', tax:'10' },  // タクシー・電車・バス・市内駐車場
+  '6110':{ name:'出張旅費',         type:'expense', tax:'10' },  // 宿泊・遠地交通（ホテル・新幹線・レンタカー）
+  '6120':{ name:'車両費',           type:'expense', tax:'10' },  // ガソリン・車修理・タイヤ・パーツ
   '6130':{ name:'荷造運賃',         type:'expense', tax:'10' },  // 荷物発送
   // ══ 交際・会議 ══
-  '6200':{ name:'接待交際費',       type:'expense', tax:'10' },  // 接待・飲食3000円以上
-  '6210':{ name:'会議費',           type:'expense', tax:'10' },  // 打ち合わせ飲食〜3000円
+  '6200':{ name:'接待交際費',       type:'expense', tax:'10' },  // 接待飲食3,000円以上
+  '6210':{ name:'会議費',           type:'expense', tax:'10' },  // 社内会議・打合せ飲食〜3,000円
   // ══ 消耗品・事務 ══
   '6300':{ name:'消耗品費',         type:'expense', tax:'10' },  // 事務用品・印刷・PC等
-  '6320':{ name:'新聞図書費',       type:'expense', tax:'10' },
+  '6320':{ name:'新聞図書費',       type:'expense', tax:'10' },  // 書籍・新聞・雑誌（コーチャンフォー等）
   // ══ 通信 ══
-  '6400':{ name:'通信費',           type:'expense', tax:'10' },  // 切手・郵便・電話
+  '6400':{ name:'通信費',           type:'expense', tax:'10' },  // 携帯・郵便切手・電話
   // ══ 福利厚生 ══
   '6500':{ name:'福利厚生費',       type:'expense', tax:'10' },  // スタッフ食料品・飲み物
   // ══ 広告 ══
   '6600':{ name:'広告宣伝費',       type:'expense', tax:'10' },
   // ══ 地代家賃・水光熱 ══
-  '6700':{ name:'地代家賃',         type:'expense', tax:'10' },
+  '6700':{ name:'地代家賃',         type:'expense', tax:'10' },  // dispo.家賃等
+  '6740':{ name:'支払手数料',       type:'expense', tax:'10' },  // 振込手数料・ATM/CD提携手数料
   '6800':{ name:'水道光熱費',       type:'expense', tax:'10' },
   // ══ その他経費 ══
   '6900':{ name:'修繕費',           type:'expense', tax:'10' },
   '7000':{ name:'雑費',             type:'expense', tax:'10' },
-  '7100':{ name:'保険料',           type:'expense', tax:'0'  },
-  '7300':{ name:'租税公課',         type:'expense', tax:'no' },  // 収入印紙・税金・社保（本人負担）
+  '7100':{ name:'保険料',           type:'expense', tax:'no' },  // あいおいニッセイ等
+  '7300':{ name:'租税公課',         type:'expense', tax:'no' },  // 収入印紙・住民税等
   '7400':{ name:'減価償却費',       type:'expense', tax:'no' },
   // ══ 資産 ══
-  '1030':{ name:'小口現金',         type:'asset',   tax:'no' },  // 小口現金引出
+  '1030':{ name:'小口現金',         type:'asset',   tax:'no' },  // 小口現金
   '1110':{ name:'普通預金',         type:'asset',   tax:'no' },  // 銀行口座
   '1500':{ name:'仮払金',           type:'asset',   tax:'no' },
   '1510':{ name:'立替金',           type:'asset',   tax:'no' },
   '1520':{ name:'前払費用',         type:'asset',   tax:'no' },
-  '1700':{ name:'車両運搬具',       type:'asset',   tax:'10' },  // 高額車両関連
+  '1700':{ name:'車両運搬具',       type:'asset',   tax:'10' },  // 高額車両（資産計上）
 };
 
 const CR_ACCT = [
   { code:'1000', name:'現金' },
   { code:'1030', name:'小口現金' },
+  { code:'1110', name:'普通預金' },
   { code:'2100', name:'未払金（法人カード）' },
   { code:'2110', name:'未払金（クレジット）' },
-  { code:'1010', name:'普通預金' },
   { code:'2000', name:'買掛金' },
 ];
 
@@ -1057,7 +1061,7 @@ function autoExportToFile() {
   const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,16); // YYYY-MM-DDTHH-MM
   const filename = `receipt-data-${ts}.json`;
   const payload = JSON.stringify({
-    version: 'v29',
+    version: 'v30',
     exportedAt: new Date().toISOString(),
     auto: true,
     receipts: receipts.map(r => { const { img, imgType, _imgTemp, ...rest } = r; return rest; })
@@ -1297,16 +1301,21 @@ async function analyzeAI(b64, mime) {
 返すJSON:
 {"store":"支払先名","date":"YYYY-MM-DD","accountCode":"6100","taxType":"10","crAccountCode":"1030","memo":"摘要","total":0,"items":[{"name":"品目名","qty":1,"unitPrice":0,"price":0,"accountCode":"6100","taxType":"10"}]}
 
-【科目ルール（必ず守ること）】
-- タクシー・電車・バス・駐車場 → 6100（旅費交通費）
-- ガソリン・燃料・車修理・タイヤ → 6120（車両費）※水道光熱費6800や旅費交通費6100は絶対に使わない
-- 接待・会食（社外・3000円以上） → 6200（接待交際費）
-- 打ち合わせ・社内飲食（3000円未満） → 6210（会議費）
-- スタッフの食料品・飲み物 → 6500（福利厚生費）taxType:"10"
-- 事務用品・消耗品・印刷・コピー・文房具 → 6300（消耗品費）※租税公課7300は絶対使わない
+【科目ルール（弥生Next準拠・必ず守ること）】
+- タクシー・電車・バス・市内駐車場 → 6100（旅費交通費）
+- ホテル・宿泊・遠地交通（千歳・札幌外・本州等）・新幹線・レンタカー・航空券 → 6110（出張旅費）
+- ガソリン・燃料・車修理・タイヤ・車パーツ → 6120（車両費）※水道光熱費6800や旅費交通費6100は絶対に使わない
+- 接待・会食（社外・3,000円以上） → 6200（接待交際費）
+- 打合せ・社内飲食（3,000円未満） → 6210（会議費）
+- スタッフ食料品・飲み物・お茶 → 6500（福利厚生費）taxType:"10"（食料品本体は"8"）
+- 事務用品・消耗品・印刷・コピー・文房具・PC周辺機器 → 6300（消耗品費）※租税公課7300は絶対使わない
+- 書籍・新聞・雑誌・専門書（コーチャンフォー・大垣書店・三省堂・大型書店等） → 6320（新聞図書費）
 - 切手・郵便（手紙・書類送付） → 6400（通信費）taxType:"10"
 - 荷物発送・宅配便 → 6130（荷造運賃）
-- 収入印紙 → 7300（租税公課）taxType:"no"
+- 保険料・損保・賠償責任保険（あいおいニッセイ等） → 7100（保険料）taxType:"no"
+- 振込手数料・ATM手数料・CD提携手数料 → 6740（支払手数料）taxType:"10"
+- 業務委託・外注（システム・デザイン・印刷等の発注） → 5120（外注費）
+- 収入印紙・住民税・消費税納付 → 7300（租税公課）taxType:"no"
 - 食料品（軽減税率） → taxType:"8"
 
 totalは税込合計金額（整数）。taxType: 課税10%→"10"、軽減8%→"8"、非課税→"0"、不課税→"no"`;
@@ -2413,24 +2422,28 @@ async function analyzeBankPDF(file) {
 【返すJSON配列の形式】
 [{"date":"YYYY-MM-DD","memo":"摘要（通帳記載のまま）","total":金額（整数）,"accountCode":"科目コード","taxType":"no"}]
 
-【科目コード】
+【科目コード（弥生Next準拠）】
 入金（プラス）:
-- 国保連・訓練等給付費・計画相談支援費・相談支援費すべて → "4000"
-- コンサル・研修・講師料の入金 → "4020"
-- その他の入金・雑収入 → "4030"
+- 国保連・ホッカイドウコクホレン・訓練等給付費・計画相談支援費 → "4000"（相談支援売上）
+- コンサル・研修・講師料・119インターナショナル等 → "4020"（コンサル収入）
+- 助成金・補助金・札幌市助成金等 → "4030"（雑収入）
+- 利息・手数料還元 → "4040"（売上高）
 
 出金（マイナス）:
+- 役員報酬の支払（イワモト リョウタ等） → "5000"
 - 給与・賃金の支払 → "5010"
-- 役員報酬の支払 → "5000"
 - 社会保険料の引落 → "5030"
-- 業務委託費の支払 → "5020"
-- 家賃・地代の支払 → "6700"
+- 業務委託・外注の支払（カ）デイスポ以外の業者・SMBC等含む） → "5120"（外注費）
+- 家賃・地代の支払（カ）ディスポ等） → "6700"（地代家賃）
 - 水道光熱費の引落 → "6800"
 - 通信費（電話・ネット）の引落 → "6400"
-- 税金（法人税・住民税等）の引落 → "7300"
-- 小口現金引出・ATM引出 → "1030"
-- 旅費・交通費 → "6100"
-- その他の出金 → "7000"
+- 振込手数料・ATM/CD提携手数料 → "6740"（支払手数料）
+- 保険料（あいおいニッセイ等） → "7100"
+- 税金（法人税・住民税・印紙税等）の引落 → "7300"（租税公課）
+- 小口現金引出・ATM引出・自動機支払・セブン銀行提携 → "1030"
+- 出張系の宿泊・遠地交通 → "6110"（出張旅費）
+- 市内タクシー・駐車場 → "6100"（旅費交通費）
+- その他の出金 → "7000"（雑費）
 
 JSON配列のみ返答。前後の説明・マークダウン不要。`;
 
@@ -2632,9 +2645,8 @@ function bulkChangeCr() {
   document.getElementById('syncModal').classList.add('hide');
 }
 
-// 既存データの科目を新ルールに一括変換
+// 既存データの科目を新ルール（弥生Next準拠）に一括変換
 const ACCT_REMAP = {
-  // ガソリン・車両費：6100旅費交通費→6120車両費（摘要にガソリン・ガス・燃料・修理・タイヤが含まれる場合）
   // 接待：6220接待飲食費→6200接待交際費
   '6220': '6200',
   // 事務用品費：6310→6300消耗品費
@@ -2643,9 +2655,10 @@ const ACCT_REMAP = {
   '6410': '6400',
   // 食事代（社内）：6510→6500福利厚生費
   '6510': '6500',
-  // 交際費：6200→6200（そのまま、名称変更のみ）
-  // 新聞図書費：7100→6320
-  '7100': '6320',
+  // v30: 業務委託費→外注費（弥生Next統合）
+  '5020': '5120',
+  // 注：旧版で 7100 を新聞図書費としてマップしていたが、
+  // 弥生Next整合で 7100=保険料に確定したため削除（必要なら手動で再分類）
 };
 
 const GASOLINE_KEYWORDS = ['ガソリン','ガス','燃料','給油','エネオス','出光','コスモ','シェル','修理','タイヤ','整備','オイル'];
@@ -2731,7 +2744,7 @@ async function exportClipboard() {
 // エクスポート：JSONファイル保存（固定ファイル名でiCloud Driveに誘導）
 function exportJsonFile() {
   const payload = JSON.stringify({
-    version: 'v29',
+    version: 'v30',
     receipts,
     bank: JSON.parse(localStorage.getItem('corp_bank') || '[]'),
     trash: JSON.parse(localStorage.getItem('corp_trash') || '[]'),
