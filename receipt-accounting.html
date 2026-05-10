@@ -447,7 +447,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
   <div class="logo">
     <div class="logo-m">会</div>
     <div>
-      <div class="logo-n">法人レシート会計 <span style="font-size:9px;opacity:0.5">v28</span></div>
+      <div class="logo-n">法人レシート会計 <span style="font-size:9px;opacity:0.5">v29</span></div>
       <div class="logo-s">CORPORATE EXPENSE LEDGER</div>
     </div>
   </div>
@@ -469,8 +469,26 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
 <!-- 同期モーダル（iCloud Drive方式） -->
 <div class="sync-modal hide" id="syncModal">
   <div class="sync-inner">
-    <div class="sync-title">☁️ iCloud Drive 同期</div>
-    <div class="sync-sub">JSONファイルをiCloud Driveに保存することで<br>Mac・iPhone間でデータを共有できます。</div>
+    <div class="sync-title">☁️ iCloud Drive 同期 / バックアップ</div>
+
+    <!-- バックアップ状況パネル（v29） -->
+    <div id="backupStatusPanel" style="background:linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 100%);border:1px solid #bae6fd;border-radius:10px;padding:12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:18px;">🛡️</span>
+        <span style="font-size:12px;font-weight:700;color:#0c4a6e;">バックアップ状況</span>
+      </div>
+      <div id="backupStatusDetail" style="font-size:11px;line-height:1.6;color:#0f172a;">読み込み中...</div>
+    </div>
+
+    <details style="margin-bottom:12px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 10px;">
+      <summary style="font-size:11px;font-weight:700;color:#713f12;cursor:pointer;">📁 自動バックアップ設定（初回のみ）</summary>
+      <div style="font-size:10.5px;line-height:1.6;color:#3f3f46;margin-top:8px;">
+        <b>Mac Safari の設定:</b><br>
+        Safari メニュー → 設定 → 一般 → ファイルのダウンロード先：<br>
+        <code style="background:#fff;padding:2px 5px;border-radius:3px;">iCloud Drive &gt; 書類 &gt; receipt-backup</code> フォルダを新規作成して指定<br><br>
+        これで5件追加するごと/日付が変わるごとに、タイムスタンプ付きJSONが自動的に iCloud Drive に保存されます。
+      </div>
+    </details>
 
     <hr class="sync-divider">
 
@@ -755,6 +773,7 @@ select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns=
         <option value="2026">令和8年度（2026）</option>
       </select>
       <span id="fiscalYearLabel" style="font-size:10px;color:var(--accent2);font-weight:600"></span>
+      <span id="backupBadge" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;cursor:pointer;background:#9ca3af;color:#fff;display:none;" onclick="showSyncModal()" title="クリックでバックアップモーダルを開く">🛡️ <span id="backupBadgeText">確認中</span></span>
     </div>
     <div class="lh" style="flex-wrap:wrap;gap:4px">
       <div class="lh-t">経費一覧</div>
@@ -912,8 +931,195 @@ let curTab = 'ov';
 // ローカル保存
 function save() {
   const toSave = receipts.map(r => { const { img, imgType, _imgTemp, ...rest } = r; return rest; });
-  try { localStorage.setItem('corp_r2', JSON.stringify(toSave)); } catch(e) { console.warn('save failed:', e); }
+  try {
+    localStorage.setItem('corp_r2', JSON.stringify(toSave));
+    // メタ情報も同時更新（破壊検知用）
+    updateMetaCount();
+    // 自動エクスポートのトリガーチェック
+    triggerAutoExportIfNeeded();
+    // バッジ表示更新
+    updateBackupBadge();
+  } catch(e) { console.warn('save failed:', e); }
 }
+
+// ══════════════════════════════
+// BACKUP & DATA INTEGRITY (v29)
+// ══════════════════════════════
+const META_KEY = 'corp_r2_meta';
+const AUTO_EXPORT_THRESHOLD = 5; // 5件追加ごとに自動エクスポート
+const BACKUP_WARN_DAYS = 7;      // 7日以上バックアップなしで警告
+
+function getMeta() {
+  try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+function setMeta(meta) {
+  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); }
+  catch(e) { console.warn('meta save failed:', e); }
+}
+function updateMetaCount() {
+  const meta = getMeta();
+  const prevCount = meta.lastCount || 0;
+  meta.lastCount = receipts.length;
+  meta.lastSavedAt = new Date().toISOString();
+  // 増減を記録（自動エクスポート判定用）
+  if (receipts.length > prevCount) {
+    meta.addedSinceExport = (meta.addedSinceExport || 0) + (receipts.length - prevCount);
+  }
+  setMeta(meta);
+}
+
+// 起動時の破壊検知。前回件数と現在件数を比較して大幅減なら警告
+function checkDataIntegrity() {
+  const meta = getMeta();
+  const prevCount = meta.lastCount;
+  const curCount = receipts.length;
+  if (typeof prevCount !== 'number') {
+    // 初回起動：メタ作成のみ
+    updateMetaCount();
+    return;
+  }
+  // データ完全消失かつ過去に履歴があった
+  if (curCount === 0 && prevCount > 0) {
+    showRecoveryDialog(prevCount);
+    return;
+  }
+  // 2件以上減 → 警告
+  if (prevCount - curCount >= 2) {
+    showDataLossWarning(prevCount, curCount);
+    return;
+  }
+  // 正常時はメタを更新
+  updateMetaCount();
+}
+
+function showRecoveryDialog(prevCount) {
+  const dlg = document.createElement('div');
+  dlg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  dlg.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:20px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);">
+      <div style="font-size:32px;text-align:center;margin-bottom:8px;">🚨</div>
+      <div style="font-size:16px;font-weight:700;text-align:center;margin-bottom:8px;color:#b91c1c;">データ消失を検知しました</div>
+      <div style="font-size:13px;line-height:1.6;color:#555;margin-bottom:16px;">
+        前回保存時は <b>${prevCount}件</b> ありましたが、現在は <b>0件</b> です。<br>
+        Safari の「履歴とWebサイトデータを消去」などで localStorage が削除された可能性があります。
+        <br><br>
+        <b>復旧手順:</b><br>
+        1. iCloud Drive > 書類 > <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;">receipt-backup</code> フォルダ内に最新JSONがあれば、それを読み込んでください。<br>
+        2. 自動ダウンロード機能で保存された <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;">receipt-data-YYYY-MM-DD-HH-MM.json</code> を Mac のダウンロードフォルダで探してください。
+      </div>
+      <div style="display:flex;gap:8px;flex-direction:column;">
+        <button id="dlgRestoreBtn" style="background:#2563eb;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;">📂 JSONファイルから復元</button>
+        <button id="dlgDismissBtn" style="background:#e5e7eb;color:#333;border:none;padding:10px;border-radius:8px;font-weight:600;cursor:pointer;">この警告を消す（新規入力で開始）</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.querySelector('#dlgRestoreBtn').onclick = () => {
+    document.body.removeChild(dlg);
+    showSyncModal();
+  };
+  dlg.querySelector('#dlgDismissBtn').onclick = () => {
+    if (confirm('警告を消すと、過去のデータは消失したものとして扱われます。本当によろしいですか？')) {
+      const meta = getMeta();
+      meta.lastCount = 0;
+      meta.dismissedAt = new Date().toISOString();
+      setMeta(meta);
+      document.body.removeChild(dlg);
+    }
+  };
+}
+
+function showDataLossWarning(prev, cur) {
+  const lost = prev - cur;
+  if (!confirm(`⚠️ データ件数の減少を検知\n\n前回: ${prev}件 → 現在: ${cur}件 （${lost}件減）\n\n意図した削除でしたか？\n「OK」を押すと現在の状態を新しい基準として記録します。\n「キャンセル」を押すと現状維持します（次回起動時にも警告）。`)) {
+    return;
+  }
+  updateMetaCount();
+}
+
+// 自動エクスポート：5件追加ごと、または日付が変わったら発火
+function triggerAutoExportIfNeeded() {
+  const meta = getMeta();
+  const added = meta.addedSinceExport || 0;
+  const lastExport = meta.lastAutoExportAt ? new Date(meta.lastAutoExportAt) : null;
+  const now = new Date();
+  let shouldExport = false;
+  if (added >= AUTO_EXPORT_THRESHOLD) shouldExport = true;
+  // 日付跨ぎ
+  if (lastExport && lastExport.toDateString() !== now.toDateString() && receipts.length > 0) shouldExport = true;
+  if (!shouldExport) return;
+  autoExportToFile();
+}
+
+function autoExportToFile() {
+  if (receipts.length === 0) return;
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,16); // YYYY-MM-DDTHH-MM
+  const filename = `receipt-data-${ts}.json`;
+  const payload = JSON.stringify({
+    version: 'v29',
+    exportedAt: new Date().toISOString(),
+    auto: true,
+    receipts: receipts.map(r => { const { img, imgType, _imgTemp, ...rest } = r; return rest; })
+  }, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  const meta = getMeta();
+  meta.lastAutoExportAt = new Date().toISOString();
+  meta.addedSinceExport = 0;
+  setMeta(meta);
+  toast(`💾 自動バックアップ: ${filename}`);
+}
+
+// バックアップ状況の判定
+function getBackupStatus() {
+  const meta = getMeta();
+  const lastBackup = meta.lastBackupAt || meta.lastAutoExportAt;
+  if (!lastBackup) {
+    return { color: '#ef4444', icon: '🔴', label: '未取得', warning: true, days: Infinity };
+  }
+  const ago = (Date.now() - new Date(lastBackup).getTime()) / 86400000;
+  if (ago < 1) {
+    const t = new Date(lastBackup);
+    return { color: '#10b981', icon: '🟢', label: `本日 ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`, warning: false, days: ago };
+  }
+  if (ago < BACKUP_WARN_DAYS) {
+    return { color: '#f59e0b', icon: '🟡', label: `${Math.floor(ago)}日前`, warning: false, days: ago };
+  }
+  return { color: '#ef4444', icon: '🔴', label: `${Math.floor(ago)}日前`, warning: true, days: ago };
+}
+
+function updateBackupBadge() {
+  const badge = document.getElementById('backupBadge');
+  const text = document.getElementById('backupBadgeText');
+  if (!badge || !text) return;
+  // データが存在しない場合は非表示
+  if (receipts.length === 0) {
+    badge.style.display = 'none';
+    return;
+  }
+  const status = getBackupStatus();
+  badge.style.display = 'inline-block';
+  badge.style.background = status.color;
+  text.textContent = `${status.icon} ${status.label}`;
+  badge.title = status.warning
+    ? '⚠️ バックアップが古い/未取得です。クリックして取得してください。'
+    : 'バックアップ取得済み。クリックでモーダルを開く。';
+}
+
+// 重要操作前のガード（一括変換等）
+function confirmDestructiveAction(actionName) {
+  const status = getBackupStatus();
+  if (status.warning) {
+    return confirm(`⚠️ バックアップが古い/未取得です（${status.label}）。\n\n「${actionName}」は元に戻せない一括操作です。\n先にバックアップを取ることを強く推奨します。\n\nそれでも続行しますか？`);
+  }
+  return true;
+}
+
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const fmt = n => '¥' + Math.round(Number(n)||0).toLocaleString('ja-JP');
 const fmtN = n => Math.round(Number(n)||0).toLocaleString('ja-JP');
@@ -2418,6 +2624,7 @@ function saveManualEntry() {
 function bulkChangeCr() {
   const code = document.getElementById('bulkCrSelect').value;
   const names = {'1000':'現金','1030':'小口現金','2100':'未払金（法人カード）','2110':'未払金（個人立替）'};
+  if (!confirmDestructiveAction(`支払方法の一括変更（全${receipts.length}件）`)) return;
   if (!confirm(`全${receipts.length}件の支払方法を「${names[code]}」に変更しますか？`)) return;
   receipts.forEach(r => { r.crAccountCode = code; });
   save(); renderList(); updateHeader(); renderOverview();
@@ -2444,6 +2651,7 @@ const ACCT_REMAP = {
 const GASOLINE_KEYWORDS = ['ガソリン','ガス','燃料','給油','エネオス','出光','コスモ','シェル','修理','タイヤ','整備','オイル'];
 
 function bulkRemapAcct() {
+  if (!confirmDestructiveAction(`科目の一括再マッピング（全${receipts.length}件対象）`)) return;
   let changed = 0;
   receipts.forEach(r => {
     const memo = (r.memo||'') + (r.store||'');
@@ -2469,6 +2677,22 @@ function showSyncModal() {
   const il = document.getElementById('importLog');
   if (el) { el.textContent = 'ボタンを押してJSONファイルを保存してください'; el.className = 'sync-status'; }
   if (il) { il.textContent = '別デバイスで保存したreceipt-data.jsonを読み込んでください'; il.className = 'sync-status'; }
+  // バックアップ状況詳細を更新
+  const detailEl = document.getElementById('backupStatusDetail');
+  if (detailEl) {
+    const status = getBackupStatus();
+    const meta = getMeta();
+    const lastBackup = meta.lastBackupAt;
+    const lastAuto = meta.lastAutoExportAt;
+    const fmtDate = iso => iso ? new Date(iso).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    detailEl.innerHTML = `
+      <div>状態：<b style="color:${status.color}">${status.icon} ${status.label}</b></div>
+      <div style="margin-top:4px;">手動バックアップ：${fmtDate(lastBackup)}</div>
+      <div>自動エクスポート：${fmtDate(lastAuto)}</div>
+      <div style="margin-top:4px;">現在の件数：<b>${receipts.length}件</b>（前回保存時：${meta.lastCount ?? '—'}件）</div>
+      ${status.warning ? '<div style="margin-top:6px;color:#b91c1c;font-weight:700;">⚠️ 早めにバックアップを取得してください</div>' : ''}
+    `;
+  }
   document.getElementById('syncModal').classList.remove('hide');
 }
 
@@ -2506,13 +2730,26 @@ async function exportClipboard() {
 
 // エクスポート：JSONファイル保存（固定ファイル名でiCloud Driveに誘導）
 function exportJsonFile() {
-  const payload = JSON.stringify({ receipts, exportedAt: new Date().toISOString() }, null, 2);
+  const payload = JSON.stringify({
+    version: 'v29',
+    receipts,
+    bank: JSON.parse(localStorage.getItem('corp_bank') || '[]'),
+    trash: JSON.parse(localStorage.getItem('corp_trash') || '[]'),
+    fiscal: localStorage.getItem('corp_fiscal'),
+    exportedAt: new Date().toISOString()
+  }, null, 2);
   const blob = new Blob([payload], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'receipt-data.json';
   document.body.appendChild(a); a.click(); setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  // 手動バックアップ時刻を記録
+  const meta = getMeta();
+  meta.lastBackupAt = new Date().toISOString();
+  meta.addedSinceExport = 0;
+  setMeta(meta);
+  updateBackupBadge();
   const el = document.getElementById('exportLog');
   if (el) {
     el.textContent = `✓ ${receipts.length}件を保存しました。iCloud Drive > 書類 に移動してください。`;
@@ -2554,7 +2791,17 @@ function mergeImport(text, logId) {
     const newItems = incoming.filter(r => !existingIds.has(r.id));
     receipts = [...newItems, ...receipts];
     receipts.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // 通帳・ゴミ箱データもあれば取り込み（v29対応）
+    if (parsed && Array.isArray(parsed.bank)) {
+      try { localStorage.setItem('corp_bank', JSON.stringify(parsed.bank)); } catch(e) {}
+    }
+    if (parsed && Array.isArray(parsed.trash)) {
+      try { localStorage.setItem('corp_trash', JSON.stringify(parsed.trash)); } catch(e) {}
+    }
     save();
+    // インポート完了 → 件数を新基準として再記録
+    updateMetaCount();
+    updateBackupBadge();
     renderList(); updateHeader(); renderOverview();
     logEl.textContent = `✓ ${newItems.length}件を取り込みました（重複${incoming.length - newItems.length}件スキップ）`;
     logEl.className = 'sync-status ok';
@@ -2652,9 +2899,12 @@ function mobileTab(t) {
 // ══════════════════════════════
 // INIT
 // ══════════════════════════════
+// v29: 起動時にデータ整合性チェック（破壊検知）
+checkDataIntegrity();
 renderList(); updateHeader(); renderOverview();
 updateApiKeyUI();
 updateSyncUI();
+updateBackupBadge();
 // file://で開いている場合は警告
 if (location.protocol === 'file:') {
   setTimeout(() => {
